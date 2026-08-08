@@ -15,17 +15,21 @@ Public API:
     read_variable         — inspect any notebook variable (Phase 3)
     read_notebook_cell    — read source + output of any cell (Phase 3)
     insert_notebook_cell  — insert a new cell into the notebook (Phase 3)
+    show_jiuwen_panel     — ipywidgets interactive control panel (requires ipywidgets)
 
 Magics registered on load:
     %%jiuwen / %jiuwen    — send query to agent (Phase 1)
     %jiuwen_config        — view or change per-notebook settings
     %jiuwen_error         — forward last exception to agent for debugging
+    %jiuwen_panel         — open the ipywidgets control panel
+    %jiuwen_save          — save the current conversation to a JSON file
 """
 
 from .client import JupyterSwarm
 from .config import JiuwenConfig, get_config
 from .session import get_default_swarm
 from .notebook_tools import read_variable, read_notebook_cell, insert_notebook_cell
+from .widgets import show_jiuwen_panel
 
 __all__ = [
     "JupyterSwarm",
@@ -35,6 +39,7 @@ __all__ = [
     "read_variable",
     "read_notebook_cell",
     "insert_notebook_cell",
+    "show_jiuwen_panel",
 ]
 __version__ = "0.1.0"
 
@@ -48,6 +53,13 @@ def load_ipython_extension(ip):
     # Per-notebook configuration magic: %jiuwen_config
     from .config import register_config_magic
     register_config_magic(ip)
+
+    # ipywidgets panel: %jiuwen_panel
+    try:
+        from .widgets import register_panel_magic
+        register_panel_magic(ip)
+    except Exception:
+        pass
 
     # Phase 2: register comm target so the JupyterLab sidebar panel can connect
     try:

@@ -21,7 +21,7 @@ import {
   JupyterFrontEndPlugin,
   ILayoutRestorer,
 } from '@jupyterlab/application';
-import { ICommandPalette, MainAreaWidget, WidgetTracker } from '@jupyterlab/apputils';
+import { ICommandPalette, MainAreaWidget, WidgetTracker, showDialog, Dialog } from '@jupyterlab/apputils';
 import { INotebookTracker, NotebookActions } from '@jupyterlab/notebook';
 import { IStatusBar } from '@jupyterlab/statusbar';
 
@@ -70,9 +70,20 @@ async function _handleCellInsert(
     cell.model.setMetadata('jiuwen_generated', true);
   }
 
-  // Optionally execute the inserted cell immediately
+  // Optionally execute the inserted cell, with an optional confirmation dialog
   if (data.execute) {
-    await NotebookActions.run(notebook, notebookPanel.sessionContext);
+    let confirmed = true;
+    if (data.confirm_execute) {
+      const result = await showDialog({
+        title: 'Run generated cell?',
+        body: 'JiuwenSwarm wants to execute the cell it just inserted. Run it now?',
+        buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Run' })],
+      });
+      confirmed = result.button.accept;
+    }
+    if (confirmed) {
+      await NotebookActions.run(notebook, notebookPanel.sessionContext);
+    }
   }
 }
 

@@ -36,6 +36,7 @@ class JupyterSwarm:
         self._mode = mode
         self._session_id = session_id or make_session_id()
         self._swarm = None  # lazy — imported on first use to avoid hard dep at load time
+        self.timeout: float = 300.0  # default; overridable via %jiuwen_config or run() kwarg
 
     # ── Public ──────────────────────────────────────────────────────────────
 
@@ -47,13 +48,19 @@ class JupyterSwarm:
     def mode(self) -> str:
         return self._mode
 
+    @mode.setter
+    def mode(self, value: str) -> None:
+        if value not in _VALID_MODES:
+            raise ValueError(f"mode must be one of {_VALID_MODES}, got {value!r}")
+        self._mode = value
+
     async def run(
         self,
         query: str,
         *,
         mode: str | None = None,
         inject_context: bool = True,
-        timeout: float = 300.0,
+        timeout: float | None = None,
         ip=None,
     ) -> str:
         """Send *query* to the agent and stream output into the current cell.
@@ -98,11 +105,12 @@ class JupyterSwarm:
             if ctx:
                 full_query = f"{ctx}\n\n---\n\n{query}"
 
+        effective_timeout = timeout if timeout is not None else self.timeout
         swarm = self._get_swarm()
         renderer = StreamRenderer()
 
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(effective_timeout):
                 final_text = await renderer.render(
                     swarm.process_message_stream(
                         session_id=self._session_id,
@@ -112,7 +120,7 @@ class JupyterSwarm:
                     )
                 )
         except TimeoutError:
-            renderer.finalize_error(f"Request timed out after {timeout:.0f}s.")
+            renderer.finalize_error(f"Request timed out after {effective_timeout:.0f}s.")
             final_text = ""
 
         return final_text

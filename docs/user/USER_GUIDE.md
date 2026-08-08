@@ -151,6 +151,41 @@ The magic automatically reads the exception traceback and the source of the fail
 
 The agent receives the full traceback and the failing cell source — you do not need to copy anything manually.
 
+## `%jiuwen_panel` — interactive control panel
+
+Opens an ipywidgets GUI inside the notebook cell output — dropdowns, sliders, and a text area that replace the `%%jiuwen` flag syntax:
+
+```
+%jiuwen_panel
+```
+
+Requires `ipywidgets`:
+
+```bash
+pip install ipywidgets
+```
+
+The panel provides:
+- Mode dropdown (`agent` / `code` / `team` / `code.team`)
+- Timeout slider (30–3600 seconds)
+- Context injection toggle
+- Named session field
+- Query text area + Send button
+- Streaming output rendered in-place
+
+## `%jiuwen_save` — save or restore session
+
+Save the current session ID to a file so it can be shared or restored independently of the automatic restart recovery:
+
+```
+%jiuwen_save                       # save to ./jiuwen_session.json
+%jiuwen_save path/to/session.json  # save to a specific file
+%jiuwen_save load                  # restore from ./jiuwen_session.json
+%jiuwen_save load path/to/session.json
+```
+
+The conversation history lives on the JiuwenSwarm server, keyed by session ID. Restoring the session ID is enough for the agent to remember the full conversation. Use this to hand off a session between colleagues or machines.
+
 ## Python API
 
 For programmatic use or async notebooks:
@@ -286,18 +321,30 @@ print(info["output"])   # what it printed or returned
 
 Useful when you want to ask the agent about something you ran earlier without copy-pasting.
 
-### `insert_notebook_cell(source, cell_type, execute)`
+### `insert_notebook_cell(source, cell_type, execute, confirm_execute)`
 
 Insert a new cell into the notebook:
 
 ```python
 from jiuwenswarm_jupyter import insert_notebook_cell
 
+# Insert and display (user runs manually)
 insert_notebook_cell("print(df.describe())", cell_type="code")
+
+# Insert and run immediately (JupyterLab Phase 2 only)
+insert_notebook_cell("print(df.describe())", cell_type="code", execute=True)
+
+# Insert and ask before running (shows a dialog in JupyterLab; input() prompt in Phase 1)
+insert_notebook_cell(
+    "df.drop(columns=['id'], inplace=True)",
+    cell_type="code",
+    execute=True,
+    confirm_execute=True,
+)
 ```
 
-- In **JupyterLab with the sidebar panel active (Phase 2)**: the cell appears immediately in the notebook.
-- In **any other environment (Phase 1)**: the code is displayed as a formatted block in the output area so you can copy and run it.
+- In **JupyterLab with the sidebar panel active (Phase 2)**: the cell appears immediately in the notebook. With `confirm_execute=True`, a "Run generated cell?" dialog is shown before execution.
+- In **any other environment (Phase 1)**: the code is displayed as a formatted block in the output area. With `confirm_execute=True`, the user is prompted via `input()`.
 
 ### When the agent uses these tools
 
@@ -308,6 +355,67 @@ When running a `%%jiuwen` cell, the agent can call these tools itself if it deci
 ## Configuration
 
 JiuwenSwarm reads its configuration from `~/.jiuwenswarm/config/config.yaml`. This is the same file used by the CLI, VS Code plugin, and JetBrains plugin — no separate Jupyter configuration is needed.
+
+---
+
+## Google Colab
+
+Phase 1 (magic + notebook tools) works in Colab with no extra setup. Phase 2 (JupyterLab sidebar) is not supported — Colab uses its own frontend.
+
+**Setup (first cell of the notebook):**
+
+```python
+!pip install jiuwenswarm jiuwenswarm-jupyter -q
+# On first use, run jiuwenswarm-init to create the config file:
+!jiuwenswarm-init
+%load_ext jiuwenswarm_jupyter
+```
+
+After the config is created, subsequent sessions only need:
+
+```python
+!pip install jiuwenswarm jiuwenswarm-jupyter -q
+%load_ext jiuwenswarm_jupyter
+```
+
+Everything then works as normal: `%%jiuwen`, `%jiuwen`, `%jiuwen_error`, `read_variable()`, `insert_notebook_cell()` (display-block fallback), etc.
+
+> **Note:** `insert_notebook_cell(..., execute=True)` shows the code in the output area in Colab — it cannot insert a runnable cell directly because the Phase 2 frontend is not available.
+
+## JupyterHub
+
+Phase 1 and Phase 3 work on JupyterHub with no changes. For Phase 2 (sidebar panel), the extension must be installed into the shared JupyterLab environment.
+
+**Multi-user isolation:** Each user runs their own kernel and their own in-process `JiuWenSwarm` instance. Sessions are keyed by `os.getcwd()` (per-user home directory), so there is no shared state between users.
+
+**Installing the extension for all users (server admin):**
+
+```bash
+pip install jiuwenswarm jiuwenswarm-jupyter
+jupyter labextension install @jiuwenswarm/jupyterlab  # after building the frontend
+```
+
+Or in the JupyterHub `Dockerfile`:
+
+```dockerfile
+RUN pip install jiuwenswarm jiuwenswarm-jupyter && \
+    cd /path/to/jiuwenswarm-jupyterlab && \
+    npm install && npm run build && \
+    pip install -e . && \
+    jupyter labextension develop --overwrite .
+```
+
+Each user still needs their own `~/.jiuwenswarm/config/config.yaml` (run `jiuwenswarm-init` once per user account).
+
+## Remote Jupyter servers
+
+When connecting to a remote Jupyter server via SSH tunnel or `jupyter lab --ip=0.0.0.0`:
+
+- Phase 1 (`%%jiuwen`) works without any changes — the magic runs in the remote kernel.
+- Phase 2 (sidebar): the TypeScript extension runs in your local browser but communicates with the remote kernel via the Jupyter comm protocol, which is automatically tunnelled through the standard Jupyter server WebSocket. No extra ports are needed.
+- `JiuWenSwarm` must be installed on the **remote** machine, not the local one.
+
+---
 
 ## Troubleshooting
 

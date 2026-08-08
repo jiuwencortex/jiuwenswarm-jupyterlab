@@ -20,15 +20,17 @@ All three phases call the same in-process `JiuWenSwarm` facade; no external serv
 jiuwenswarm-jupyterlab/
 ├── jiuwenswarm_jupyter/         Python package
 │   ├── __init__.py              Extension entry point; wires Phase 1+2+3 on load
-│   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error      [Phase 1]
+│   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error /   [Phase 1]
+│   │                            %jiuwen_save
 │   ├── config.py                JiuwenConfig dataclass + %jiuwen_config [Phase 1]
+│   ├── widgets.py               ipywidgets panel + %jiuwen_panel magic  [Phase 1]
 │   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm [Phase 1]
 │   ├── context.py               Notebook context extractor              [Phase 1]
 │   ├── display.py               IPython streaming output renderer       [Phase 1]
 │   ├── session.py               Session ID, registry, restart recovery  [Phase 1]
 │   ├── comm_handler.py          Kernel comm target + event streaming    [Phase 2]
 │   └── notebook_tools.py        read_variable / read_notebook_cell /   [Phase 3]
-│                                insert_notebook_cell (cell tagging)
+│                                insert_notebook_cell (confirm_execute, cell tagging)
 │
 ├── packages/
 │   ├── shared-webview/          Copied from jiuwenswarm-ide + Jupyter bridge patch
@@ -102,6 +104,18 @@ Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython name
 ### Error auto-forwarding (`%jiuwen_error`)
 
 `magic.py` registers `%jiuwen_error` as a line magic. When called after an exception, it reads `sys.last_type`, `sys.last_value`, and `sys.last_traceback` to format the full traceback, retrieves the failing cell source from `ip.history_manager.get_tail(n=1)`, and sends the combined context to the default swarm session. An optional extra message on the same line is appended to the query.
+
+### ipywidgets panel (`%jiuwen_panel`)
+
+`widgets.py` provides `show_jiuwen_panel(ip=None)` — an optional ipywidgets UI. It displays mode/timeout/context controls and a query text area inside the cell output. `run_sync()` is called on the Send button click so output streams into the panel's `Output` widget. Requires `pip install ipywidgets`. Gracefully degrades (prints install instructions) when ipywidgets is absent. `register_panel_magic(ip)` registers the `%jiuwen_panel` line magic.
+
+### Session save/load (`%jiuwen_save`)
+
+`magic.py` registers `%jiuwen_save` as a line magic. It reads the current default swarm's `session_id` and writes it to a JSON file (default `./jiuwen_session.json`). On `%jiuwen_save load`, it reads the JSON, creates a new `JupyterSwarm` with the stored session ID, updates the in-process registry and IPython namespace, and persists the ID through the restart-recovery path. This allows handing off sessions between machines or collaborators.
+
+### `JupyterSwarm` mode setter and instance timeout
+
+`client.py` exposes a `mode` property setter and a `timeout` float attribute (default 300 s). Both are written by `%jiuwen_config` when the user changes settings, so configuration changes propagate to the live swarm instance without requiring a new session. `run()` uses `self.timeout` as the default when no per-call `timeout` kwarg is given.
 
 ### Context injection
 
@@ -225,20 +239,23 @@ Reads from `ip.user_ns[name]`.  Dispatches to type-specific formatters:
 - `dict` / `list` → length + JSON preview
 - anything else → `repr()` truncated to 3000 chars
 
-### `insert_notebook_cell(source, cell_type, execute)`
+### `insert_notebook_cell(source, cell_type, execute, confirm_execute)`
 
 Two paths:
 
 ```
 Phase 2 active (JupyterLab sidebar connected):
-    comm.create_comm("jiuwenswarm_cell_insert").open(payload)
-    → TypeScript frontend receives comm_open message
-    → uses JupyterLab notebook API to insert the cell
-    → optionally executes it immediately
+    _comm_insert() → comm.create_comm("jiuwenswarm_cell_insert").open(payload)
+    Payload: { source, cell_type, execute, confirm_execute, jiuwen_generated: true }
+    → TypeScript _handleCellInsert():
+        NotebookActions.insertBelow() + sharedModel.setSource()
+        if confirm_execute: showDialog("Run generated cell?") before executing
+        if execute (and confirmed): NotebookActions.run()
+        cell.model.setMetadata('jiuwen_generated', true)
 
 Phase 1 only (no sidebar):
-    IPython.display.HTML renders the source as a formatted
-    code block in the cell output area with a copy hint
+    _display_proposed_cell() renders the source as formatted HTML
+    if confirm_execute and execute: input("Run? [y/N]") before notifying user
 ```
 
 ### Tool schema

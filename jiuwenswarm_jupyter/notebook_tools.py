@@ -132,14 +132,21 @@ def read_variable(name: str, ip=None) -> str:
 
 # ── insert_notebook_cell ──────────────────────────────────────────────────────
 
-def insert_notebook_cell(source: str, cell_type: str = "code", execute: bool = False, ip=None) -> str:
+def insert_notebook_cell(
+    source: str,
+    cell_type: str = "code",
+    execute: bool = False,
+    confirm_execute: bool = False,
+    ip=None,
+) -> str:
     """Insert a new cell into the current notebook.
 
     Phase 2 (JupyterLab sidebar active): inserts via Jupyter comm → the
     TypeScript frontend uses the JupyterLab notebook API to create the cell.
+    When *confirm_execute* is True, a JupyterLab dialog is shown before
+    running; in Phase 1 the user is prompted via ``input()``.
 
-    Phase 1 (magic only): renders the proposed cell in the output area as a
-    formatted block so the user can copy it into a new cell.
+    Phase 1 (magic only): renders the proposed cell in the output area.
 
     Parameters
     ----------
@@ -148,8 +155,10 @@ def insert_notebook_cell(source: str, cell_type: str = "code", execute: bool = F
     cell_type:
         ``"code"`` or ``"markdown"``.
     execute:
-        Phase 2 only: if True, the inserted cell is executed immediately
-        after insertion.  Phase 1 ignores this flag.
+        If True, execute the cell immediately after insertion.
+    confirm_execute:
+        If True (and *execute* is True), ask the user before running.  In
+        Phase 2 this shows a JupyterLab dialog; in Phase 1 uses ``input()``.
     ip:
         IPython shell.  Auto-detected if None.
 
@@ -163,13 +172,23 @@ def insert_notebook_cell(source: str, cell_type: str = "code", execute: bool = F
     if not source.strip():
         return "Error: source is empty."
 
-    # Phase 2 path: try comm insert
-    if _comm_insert(source, cell_type, execute):
-        action = " and executed" if execute else ""
+    # Phase 2 path: confirmation and execution are handled by the TypeScript frontend
+    if _comm_insert(source, cell_type, execute, confirm_execute):
+        action = " and queued for execution" if execute else ""
         return f"Cell inserted{action} into notebook."
 
     # Phase 1 fallback: display proposed cell in output area
     _display_proposed_cell(source, cell_type)
+
+    if execute and cell_type == "code" and confirm_execute:
+        answer = ""
+        try:
+            answer = input("Run this cell? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            pass
+        if answer not in ("y", "yes"):
+            return "Cell displayed. Execution skipped (not confirmed)."
+
     return "Cell displayed in output area. Copy it into a new cell to run it."
 
 
@@ -234,7 +253,14 @@ TOOL_DEFINITIONS: list[dict] = [
                 },
                 "execute": {
                     "type": "boolean",
-                    "description": "If true, execute the cell immediately after inserting (JupyterLab only).",
+                    "description": "If true, execute the cell immediately after inserting.",
+                },
+                "confirm_execute": {
+                    "type": "boolean",
+                    "description": (
+                        "If true (and execute is true), ask the user for confirmation before "
+                        "running the cell. Use this when auto-running could be destructive."
+                    ),
                 },
             },
             "required": ["source"],
@@ -256,8 +282,8 @@ def get_dispatcher(ip=None) -> dict[str, Any]:
     return {
         "read_notebook_cell": lambda cell_index: read_notebook_cell(cell_index, ip=_ip),
         "read_variable": lambda name: read_variable(name, ip=_ip),
-        "insert_notebook_cell": lambda source, cell_type="code", execute=False: insert_notebook_cell(
-            source, cell_type=cell_type, execute=execute, ip=_ip
+        "insert_notebook_cell": lambda source, cell_type="code", execute=False, confirm_execute=False: insert_notebook_cell(
+            source, cell_type=cell_type, execute=execute, confirm_execute=confirm_execute, ip=_ip
         ),
     }
 
@@ -345,11 +371,12 @@ def _format_dict(name: str, d: dict) -> str:
     return f"{name}: dict  len={len(d)}\n{sample}{suffix}"
 
 
-def _comm_insert(source: str, cell_type: str, execute: bool) -> bool:
+def _comm_insert(source: str, cell_type: str, execute: bool, confirm_execute: bool = False) -> bool:
     """Try to insert via Jupyter comm (Phase 2 path). Returns True on success.
 
     Sends ``jiuwen_generated: true`` so the frontend can tag the inserted cell
-    with ``cell.metadata.jiuwen_generated = true``.
+    with ``cell.metadata.jiuwen_generated = true``.  When ``confirm_execute``
+    is True the TypeScript frontend shows a dialog before running.
     """
     try:
         import comm as _comm_pkg
@@ -359,6 +386,7 @@ def _comm_insert(source: str, cell_type: str, execute: bool) -> bool:
             "source": source,
             "cell_type": cell_type,
             "execute": execute,
+            "confirm_execute": confirm_execute,
             "jiuwen_generated": True,
         })
         return True
