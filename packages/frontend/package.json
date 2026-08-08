@@ -1,0 +1,39 @@
+{
+  "name": "@jiuwenswarm/jupyterlab",
+  "version": "0.1.0",
+  "description": "JiuwenSwarm JupyterLab sidebar panel",
+  "keywords": ["jupyter", "jupyterlab", "jupyterlab-extension", "ai", "agents"],
+  "homepage": "https://github.com/openjiuwen/jiuwenswarm-jupyterlab",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "files": ["dist/**/*", "schema/**/*"],
+  "jupyterlab": {
+    "extension": true,
+    "outputDir": "../../jiuwenswarm_jupyter/labextension",
+    "schemaDir": "schema"
+  },
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "watch": "webpack --mode development --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@jupyterlab/application": "^4.0.0",
+    "@jupyterlab/apputils": "^4.0.0",
+    "@jupyterlab/notebook": "^4.0.0",
+    "@jupyterlab/coreutils": "^6.0.0",
+    "@lumino/widgets": "^2.0.0",
+    "@lumino/messaging": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "css-loader": "^6.0.0",
+    "style-loader": "^3.0.0",
+    "ts-loader": "^9.0.0",
+    "typescript": "^5.4.0",
+    "webpack": "^5.0.0",
+    "webpack-cli": "^5.0.0",
+    "rimraf": "^5.0.0"
+  }
+}

@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jiuwenswarm-jupyter"
+version = "0.1.0"
+description = "JiuwenSwarm integration for Jupyter notebooks and JupyterLab"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["jupyter", "ai", "agents", "multi-agent", "llm", "jiuwenswarm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Framework :: Jupyter :: JupyterLab :: 4",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "ipython>=8.0",
+    "ipywidgets>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[project.entry-points."jupyter_lab_extensions"]
+jiuwenswarm_jupyter = "jiuwenswarm_jupyter"
+
+[project.urls]
+Homepage = "https://github.com/openjiuwen/jiuwenswarm-jupyterlab"
+Documentation = "https://github.com/openjiuwen/jiuwenswarm-jupyterlab/tree/main/docs"
+Repository = "https://github.com/openjiuwen/jiuwenswarm-jupyterlab"
+Issues = "https://github.com/openjiuwen/jiuwenswarm-jupyterlab/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jiuwenswarm_jupyter"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"packages/frontend/dist" = "share/jupyter/labextensions/@jiuwenswarm/jupyterlab"
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

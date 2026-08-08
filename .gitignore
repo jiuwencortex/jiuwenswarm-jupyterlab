@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.mypy_cache/
+.ruff_cache/
+*.egg
+
+# Node / TypeScript
+node_modules/
+packages/frontend/node_modules/
+packages/frontend/dist/
+*.js.map
+.npm/
+
+# JupyterLab
+.jupyter/
+*.ipynb_checkpoints/
+.ipynb_checkpoints
+
+# Editors
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
