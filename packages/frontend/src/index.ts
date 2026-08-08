@@ -4,7 +4,6 @@
  * Registers:
  *   - Sidebar chat panel (ChatPanel)
  *   - Sidebar session list panel (SessionListPanel)
- *   - Sidebar skills browser panel (SkillsPanel)
  *   - Swarm map panel (SwarmMapPanel)
  *   - Status bar indicator (StatusIndicator)
  *   - Command palette entries
@@ -34,7 +33,6 @@ import { SwarmMapPanel } from './SwarmMapPanel';
 import { StatusIndicator } from './StatusIndicator';
 import { NotebookContextCollector } from './NotebookContextCollector';
 import { SessionListPanel } from './SessionListPanel';
-import { SkillsPanel } from './SkillsPanel';
 
 const PLUGIN_ID = '@jiuwenswarm/jupyterlab:plugin';
 
@@ -238,14 +236,6 @@ const extension: JupyterFrontEndPlugin<void> = {
     app.shell.add(sessionListPanel, 'left', { rank: 501 });
     await sessionListTracker.add(sessionListPanel);
 
-    // ── Skills browser panel ─────────────────────────────────────────────────
-    const skillsPanel = new SkillsPanel(client);
-    const skillsTracker = new WidgetTracker<SkillsPanel>({
-      namespace: 'jiuwenswarm-skills',
-    });
-    app.shell.add(skillsPanel, 'left', { rank: 502 });
-    await skillsTracker.add(skillsPanel);
-
     // ── Swarm map panel ─────────────────────────────────────────────────────
     let swarmMapWidget: MainAreaWidget<SwarmMapPanel> | null = null;
 
@@ -279,7 +269,6 @@ const extension: JupyterFrontEndPlugin<void> = {
       sendSelection: `${PLUGIN_ID}:send-selection`,
       newSession: `${PLUGIN_ID}:new-session`,
       openSessions: `${PLUGIN_ID}:open-sessions`,
-      openSkills: `${PLUGIN_ID}:open-skills`,
     };
 
     app.commands.addCommand(commands.openChat, {
@@ -309,20 +298,12 @@ const extension: JupyterFrontEndPlugin<void> = {
       },
     });
 
-    app.commands.addCommand(commands.openSkills, {
-      label: 'JiuwenSwarm: Open Skills Browser',
-      execute: () => {
-        app.shell.activateById(SkillsPanel.ID);
-      },
-    });
-
     if (palette) {
       const category = 'JiuwenSwarm';
       palette.addItem({ command: commands.openChat, category });
       palette.addItem({ command: commands.openSwarmMap, category });
       palette.addItem({ command: commands.newSession, category });
       palette.addItem({ command: commands.openSessions, category });
-      palette.addItem({ command: commands.openSkills, category });
     }
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -342,7 +323,6 @@ const extension: JupyterFrontEndPlugin<void> = {
     if (restorer) {
       restorer.add(chatPanel, 'jiuwenswarm-chat');
       restorer.add(sessionListPanel, 'jiuwenswarm-sessions');
-      restorer.add(skillsPanel, 'jiuwenswarm-skills');
     }
 
     console.log('[jiuwenswarm] JupyterLab extension activated');

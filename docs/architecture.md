@@ -21,12 +21,13 @@ jiuwenswarm-jupyterlab/
 ├── jiuwenswarm_jupyter/         Python package
 │   ├── __init__.py              Extension entry point; wires Phase 1+2+3 on load
 │   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error /   [Phase 1]
-│   │                            %jiuwen_save
+│   │                            %jiuwen_clear
 │   ├── config.py                JiuwenConfig dataclass + %jiuwen_config [Phase 1]
 │   ├── widgets.py               ipywidgets panel + %jiuwen_panel magic  [Phase 1]
 │   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm [Phase 1]
 │   ├── context.py               Notebook context extractor              [Phase 1]
-│   ├── display.py               IPython streaming output renderer       [Phase 1]
+│   ├── display.py               IPython streaming output renderer;      [Phase 1]
+│   │                            markdown→HTML via `markdown` pkg or fallback
 │   ├── session.py               Session ID, registry, restart recovery  [Phase 1]
 │   ├── comm_handler.py          Kernel comm target + event streaming    [Phase 2]
 │   └── notebook_tools.py        read_variable / read_notebook_cell /   [Phase 3]
@@ -51,7 +52,6 @@ jiuwenswarm-jupyterlab/
 │       │   ├── ChatPanel.ts     Sidebar chat panel (iframe + bridge)
 │       │   ├── SwarmMapPanel.ts Swarm map panel (iframe + postMessage)
 │       │   ├── SessionListPanel.ts  Session browser (sidebar, rank 501)
-│       │   ├── SkillsPanel.ts   Skills browser (sidebar, rank 502)
 │       │   └── StatusIndicator.ts  Status bar widget
 │       ├── package.json
 │       ├── tsconfig.json
@@ -110,9 +110,19 @@ Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython name
 
 `widgets.py` provides `show_jiuwen_panel(ip=None)` — an optional ipywidgets UI. It displays mode/timeout/context controls and a query text area inside the cell output. `run_sync()` is called on the Send button click so output streams into the panel's `Output` widget. Requires `pip install ipywidgets`. Gracefully degrades (prints install instructions) when ipywidgets is absent. `register_panel_magic(ip)` registers the `%jiuwen_panel` line magic.
 
-### Session save/load (`%jiuwen_save`)
+### Session clear (`%jiuwen_clear`)
 
-`magic.py` registers `%jiuwen_save` as a line magic. It reads the current default swarm's `session_id` and writes it to a JSON file (default `./jiuwen_session.json`). On `%jiuwen_save load`, it reads the JSON, creates a new `JupyterSwarm` with the stored session ID, updates the in-process registry and IPython namespace, and persists the ID through the restart-recovery path. This allows handing off sessions between machines or collaborators.
+`magic.py` registers `%jiuwen_clear` as a line magic. Called with no arguments, it calls `session.clear_session(None)`, which removes the current default session ID from the registry, then calls `get_default_swarm(ip)` to create a fresh `JupyterSwarm` with a new auto-generated session ID. The new instance replaces `ip.user_ns["_jiuwen"]` and a confirmation message prints the new session ID. Called with an argument (`%jiuwen_clear research`), it clears that named session only.
+
+### Keyboard interrupt handling in Phase 1
+
+Both `%%jiuwen` and `%jiuwen_error` wrap the `run_sync()` call in `try/except KeyboardInterrupt`. When the user presses Ctrl+C (kernel interrupt) while a cell is running, the exception is caught and `[JiuwenSwarm] Query cancelled.` is printed — the interrupt does not propagate and crash the kernel.
+
+### Phase 1/2 status on load
+
+`load_ipython_extension` in `__init__.py` calls `register_comm_target(ip)` and prints one of:
+- `[JiuwenSwarm] Phase 2 active — JupyterLab comm connected.` when the comm target registered successfully (JupyterLab 4+ with frontend installed)
+- `[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. Cell insertion will show display blocks.` otherwise
 
 ### `JupyterSwarm` mode setter and instance timeout
 
@@ -141,12 +151,11 @@ This is injected as a fenced block before the user query, so the agent understan
 The JupyterLab extension is a standard `JupyterFrontEndPlugin` that:
 1. Registers a sidebar chat panel (iframe embedding `chat.html`, rank 500)
 2. Registers a sidebar session list panel (`SessionListPanel`, rank 501)
-3. Registers a sidebar skills browser panel (`SkillsPanel`, rank 502)
-4. Registers a main-area swarm map panel (iframe embedding `swarm_map.html`)
-5. Adds a status bar indicator showing connection state and active agent count
-6. Exposes command palette entries and keyboard shortcuts
-7. Registers a `jiuwenswarm_cell_insert` comm target for agent-initiated cell insertion
-8. Registers a `jiuwenswarm_cell_replace` comm target for agent-initiated cell rewrites with diff review
+3. Registers a main-area swarm map panel (iframe embedding `swarm_map.html`)
+4. Adds a status bar indicator showing connection state and active agent count
+5. Exposes command palette entries and keyboard shortcuts
+6. Registers a `jiuwenswarm_cell_insert` comm target for agent-initiated cell insertion
+7. Registers a `jiuwenswarm_cell_replace` comm target for agent-initiated cell rewrites with diff review
 
 **Keyboard shortcuts** registered in `index.ts`:
 - `Cmd/Ctrl+Shift+J` → `open-chat`

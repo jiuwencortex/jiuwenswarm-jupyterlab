@@ -72,8 +72,6 @@ def _comm_target(comm, open_msg: dict) -> None:
             _cancel(data.get("session_id", ""))
         elif msg_type == "get_sessions":
             comm.send({"type": "sessions", "sessions": []})
-        elif msg_type == "get_skills":
-            _schedule(_handle_get_skills(comm))
 
     # Immediately inform the frontend that the bridge is ready.
     comm.send({
@@ -145,22 +143,6 @@ async def _handle_send_message(comm, data: dict) -> None:
         })
     finally:
         _active_tasks.pop(session_id, None)
-
-
-async def _handle_get_skills(comm) -> None:
-    """Return the list of available skills from the agent workspace."""
-    try:
-        from jiuwenswarm.server.runtime.agent_adapter.interface import JiuWenSwarm
-        swarm = JiuWenSwarm()
-        # list_skills() may not exist in all versions; degrade gracefully.
-        skills_raw = getattr(swarm, "list_skills", lambda: [])()
-        skills = [
-            {"name": s.get("name", ""), "description": s.get("description", ""), "source": s.get("source", "")}
-            for s in (skills_raw or [])
-        ]
-        comm.send({"type": "skills", "skills": skills})
-    except Exception:
-        comm.send({"type": "skills", "skills": []})
 
 
 # ── Event conversion ──────────────────────────────────────────────────────────

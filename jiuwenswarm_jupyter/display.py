@@ -12,8 +12,71 @@ dominating the output.
 from __future__ import annotations
 
 import html
+import re
 import time
 from typing import AsyncIterator, Any
+
+
+def _md_to_html(text: str) -> str:
+    """Convert markdown text to HTML for rendering in a Jupyter output cell.
+
+    Uses the ``markdown`` package (available in all standard Jupyter
+    environments via nbconvert) with the ``fenced_code`` and ``tables``
+    extensions.  Falls back to a minimal fenced-code-block parser when the
+    package is not installed.
+    """
+    try:
+        import markdown as _md
+        return _md.markdown(
+            text,
+            extensions=["fenced_code", "tables"],
+            output_format="html",
+        )
+    except ImportError:
+        pass
+
+    # Minimal fallback: extract fenced code blocks, HTML-escape everything else.
+    fence_re = re.compile(r'```(\w*)\n(.*?)(?:```|$)', re.DOTALL)
+    html_parts: list[str] = []
+    last = 0
+
+    for m in fence_re.finditer(text):
+        # Prose before this block
+        before = text[last:m.start()]
+        if before:
+            html_parts.append(_prose_to_html(before))
+
+        lang = html.escape(m.group(1).strip())
+        code = html.escape(m.group(2).rstrip("\n"))
+        lang_class = f' class="language-{lang}"' if lang else ""
+        html_parts.append(
+            f"<pre style='background:#1e1e1e;color:#d4d4d4;padding:8px;"
+            f"border-radius:4px;overflow:auto;margin:6px 0'>"
+            f"<code{lang_class}>{code}</code></pre>"
+        )
+        last = m.end()
+
+    tail = text[last:]
+    if tail:
+        html_parts.append(_prose_to_html(tail))
+
+    return "".join(html_parts)
+
+
+def _prose_to_html(text: str) -> str:
+    """Apply inline markdown to a prose segment and wrap in a pre-wrap span."""
+    # Inline code
+    text = re.sub(
+        r'`([^`]+)`',
+        lambda m: f'<code style="background:#2d2d2d;padding:1px 4px;border-radius:3px">'
+                  f'{html.escape(m.group(1))}</code>',
+        text,
+    )
+    # Bold then italic (on already-substituted string)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<em>\1</em>', text)
+    # Wrap preserving whitespace
+    return f"<span style='white-space:pre-wrap'>{text}</span>"
 
 
 class StreamRenderer:
@@ -121,14 +184,13 @@ class StreamRenderer:
                     )
             parts.append("</div>")
 
-        # Main response text (rendered as preformatted, markdown-like)
+        # Main response text — rendered as markdown HTML
         text = "".join(self._text_buf)
         if text:
-            escaped = html.escape(text)
-            # Very basic markdown: wrap code blocks in <pre>
             parts.append(
-                f"<div style='font-family: inherit; white-space: pre-wrap; "
-                f"word-break: break-word; line-height: 1.5'>{escaped}</div>"
+                f"<div style='font-family: inherit; line-height: 1.6'>"
+                f"{_md_to_html(text)}"
+                f"</div>"
             )
 
         # Footer

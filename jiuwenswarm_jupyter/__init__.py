@@ -22,8 +22,8 @@ Magics registered on load:
     %%jiuwen / %jiuwen    — send query to agent (Phase 1)
     %jiuwen_config        — view or change per-notebook settings
     %jiuwen_error         — forward last exception to agent for debugging
+    %jiuwen_clear         — reset current or named session context
     %jiuwen_panel         — open the ipywidgets control panel
-    %jiuwen_save          — save the current conversation to a JSON file
 """
 
 from .client import JupyterSwarm
@@ -63,13 +63,22 @@ def load_ipython_extension(ip):
     except Exception:
         pass
 
-    # Phase 2: register comm target so the JupyterLab sidebar panel can connect
+    # Phase 2: register comm target so the JupyterLab sidebar panel can connect.
+    # Print a one-line status so users know which mode is active.
     try:
         from .comm_handler import register_comm_target
-        register_comm_target(ip)
+        if register_comm_target(ip):
+            print("[JiuwenSwarm] Phase 2 active — JupyterLab comm connected.")
+        else:
+            print(
+                "[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. "
+                "Cell insertion will show display blocks."
+            )
     except Exception:
-        # Not running inside a kernel that supports comm — fine for Phase 1.
-        pass
+        print(
+            "[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. "
+            "Cell insertion will show display blocks."
+        )
 
     # Expose default session as _jiuwen and config as _jiuwen_config
     ip.user_ns.setdefault("_jiuwen", get_default_swarm(ip))

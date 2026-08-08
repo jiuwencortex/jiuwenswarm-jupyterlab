@@ -6,6 +6,10 @@ All Phase 1–3 features are implemented. See `architecture.md` and `user/USER_G
 
 ## Remaining development
 
+Items are scoped to this package only. They require no changes to `jiuwenswarm` core.
+
+---
+
 ### Multi-kernel support _(large)_
 
 One chat panel that can address multiple simultaneously open notebooks, each with its own kernel and conversation session.
@@ -22,3 +26,4 @@ One chat panel that can address multiple simultaneously open notebooks, each wit
 
 - Notebook diff / version control integration (separate project)
 - Non-Jupyter Python REPL integration
+- API key management, `jiuwenswarm-init` simplification, or any change to `jiuwenswarm` core

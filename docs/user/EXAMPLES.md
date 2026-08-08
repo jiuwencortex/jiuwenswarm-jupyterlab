@@ -3,6 +3,9 @@
 These examples show what actually happens when you use JiuwenSwarm in a notebook.
 They are written as stories: what you do, what you type, and what you get back.
 
+**Runnable version:** [`examples/examples.ipynb`](../../examples/examples.ipynb) contains
+all examples as executable cells with synthetic data — no external files required.
+
 ---
 
 ## Before you start — what needs to be installed

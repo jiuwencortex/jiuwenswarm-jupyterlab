@@ -32,6 +32,11 @@ If the file does not exist, create it with:
 ipython profile create
 ```
 
+After loading, a one-line status message tells you which mode is active:
+
+- `[JiuwenSwarm] Phase 2 active — JupyterLab comm connected.` — the sidebar panel is available.
+- `[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. Cell insertion will show display blocks.` — you are in Phase 1 only. Everything works except `insert_notebook_cell`/`replace_notebook_cell` will display output blocks instead of editing the notebook directly.
+
 ## Cell magic — `%%jiuwen`
 
 The `%%jiuwen` magic sends the cell body to the agent and streams the response into the cell output area.
@@ -173,18 +178,22 @@ The panel provides:
 - Query text area + Send button
 - Streaming output rendered in-place
 
-## `%jiuwen_save` — save or restore session
+## `%jiuwen_clear` — reset conversation context
 
-Save the current session ID to a file so it can be shared or restored independently of the automatic restart recovery:
+Start a fresh conversation without restarting the kernel:
 
 ```
-%jiuwen_save                       # save to ./jiuwen_session.json
-%jiuwen_save path/to/session.json  # save to a specific file
-%jiuwen_save load                  # restore from ./jiuwen_session.json
-%jiuwen_save load path/to/session.json
+%jiuwen_clear                  # clear the default session
+%jiuwen_clear research         # clear a specific named session
 ```
 
-The conversation history lives on the JiuwenSwarm server, keyed by session ID. Restoring the session ID is enough for the agent to remember the full conversation. Use this to hand off a session between colleagues or machines.
+`%jiuwen_clear` creates a new session ID and replaces the current entry in the session registry and `_jiuwen`. The agent has no memory of the previous conversation after this point. Named sessions (`%%jiuwen --session <name>`) can be cleared individually.
+
+After clearing, the new session ID is printed:
+
+```
+[JiuwenSwarm] Default session cleared. New session: jupyter_a1b2c3d4
+```
 
 ## Python API
 
@@ -256,7 +265,6 @@ The left sidebar contains three JiuwenSwarm panels (accessible via the sidebar i
 |---|---|
 | **Chat** (rank 1) | Main conversation panel — same as `%%jiuwen` but interactive |
 | **Sessions** (rank 2) | Browse and switch between named sessions; click "+ New" to start one |
-| **Skills** (rank 3) | Browse available skills; press ↻ to refresh from the kernel |
 
 ### Keyboard shortcuts
 
@@ -273,7 +281,6 @@ Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac) → search "JiuwenSwarm":
 - `JiuwenSwarm: Open Swarm Map` — open the agent activity panel
 - `JiuwenSwarm: New Session` — start a fresh conversation
 - `JiuwenSwarm: Open Session List` — open the sessions panel
-- `JiuwenSwarm: Open Skills Browser` — open the skills panel
 
 ### Agent-generated cell tagging
 
