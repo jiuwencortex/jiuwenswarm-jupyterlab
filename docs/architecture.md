@@ -20,14 +20,15 @@ All three phases call the same in-process `JiuWenSwarm` facade; no external serv
 jiuwenswarm-jupyterlab/
 ├── jiuwenswarm_jupyter/         Python package
 │   ├── __init__.py              Extension entry point; wires Phase 1+2+3 on load
-│   ├── magic.py                 %%jiuwen / %jiuwen cell magic           [Phase 1]
+│   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error      [Phase 1]
+│   ├── config.py                JiuwenConfig dataclass + %jiuwen_config [Phase 1]
 │   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm [Phase 1]
 │   ├── context.py               Notebook context extractor              [Phase 1]
 │   ├── display.py               IPython streaming output renderer       [Phase 1]
-│   ├── session.py               Session ID management + registry        [Phase 1]
+│   ├── session.py               Session ID, registry, restart recovery  [Phase 1]
 │   ├── comm_handler.py          Kernel comm target + event streaming    [Phase 2]
 │   └── notebook_tools.py        read_variable / read_notebook_cell /   [Phase 3]
-│                                insert_notebook_cell
+│                                insert_notebook_cell (cell tagging)
 │
 ├── packages/
 │   ├── shared-webview/          Copied from jiuwenswarm-ide + Jupyter bridge patch
@@ -46,6 +47,8 @@ jiuwenswarm-jupyterlab/
 │       │   ├── SwarmStateManager.ts  Live state updates from kernel
 │       │   ├── ChatPanel.ts     Sidebar chat panel (iframe + bridge)
 │       │   ├── SwarmMapPanel.ts Swarm map panel (iframe + postMessage)
+│       │   ├── SessionListPanel.ts  Session browser (sidebar, rank 501)
+│       │   ├── SkillsPanel.ts   Skills browser (sidebar, rank 502)
 │       │   └── StatusIndicator.ts  Status bar widget
 │       ├── package.json
 │       ├── tsconfig.json
@@ -90,6 +93,16 @@ magic.py  ─── parse options ──► JupyterSwarm.run_sync()
 
 Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython namespace as `_jiuwen`. Subsequent `%%jiuwen` cells in the same notebook continue the same conversation. Named sessions (`--session research`) create separate `JupyterSwarm` instances in a thread-safe registry.
 
+**Restart recovery:** On load, `session.py` checks `~/.jiuwenswarm/jupyter_sessions.json` for a previously saved session ID keyed by working directory (`os.getcwd()`). If found and younger than 30 days, the same session ID is restored so the agent can continue the conversation after a kernel restart. The session ID is saved every time a new default session is created.
+
+### Per-notebook configuration
+
+`config.py` provides `JiuwenConfig` — a dataclass storing per-notebook defaults (`mode`, `timeout`, `inject_context`, `model`). The `%jiuwen_config` magic lets users view or change these from any cell. The current config is stored in `_jiuwen_config` in the IPython namespace. Individual `%%jiuwen` flag overrides take precedence over config values.
+
+### Error auto-forwarding (`%jiuwen_error`)
+
+`magic.py` registers `%jiuwen_error` as a line magic. When called after an exception, it reads `sys.last_type`, `sys.last_value`, and `sys.last_traceback` to format the full traceback, retrieves the failing cell source from `ip.history_manager.get_tail(n=1)`, and sends the combined context to the default swarm session. An optional extra message on the same line is appended to the query.
+
 ### Context injection
 
 Before each request, `context.py` extracts:
@@ -110,11 +123,22 @@ This is injected as a fenced block before the user query, so the agent understan
 
 ### Architecture
 
-The JupyterLab extension is a standard JupyterFrontEndPlugin that:
-1. Registers a sidebar chat panel (iframe embedding `chat.html`)
-2. Registers a main-area swarm map panel (iframe embedding `swarm_map.html`)
-3. Adds a status bar indicator showing connection state and active agent count
-4. Exposes command palette entries for opening panels and creating sessions
+The JupyterLab extension is a standard `JupyterFrontEndPlugin` that:
+1. Registers a sidebar chat panel (iframe embedding `chat.html`, rank 500)
+2. Registers a sidebar session list panel (`SessionListPanel`, rank 501)
+3. Registers a sidebar skills browser panel (`SkillsPanel`, rank 502)
+4. Registers a main-area swarm map panel (iframe embedding `swarm_map.html`)
+5. Adds a status bar indicator showing connection state and active agent count
+6. Exposes command palette entries and keyboard shortcuts
+7. Registers a `jiuwenswarm_cell_insert` comm target for agent-initiated cell insertion
+
+**Keyboard shortcuts** registered in `index.ts`:
+- `Cmd/Ctrl+Shift+J` → `open-chat`
+- `Cmd/Ctrl+Shift+N` → `new-session`
+
+**`jiuwenswarm_cell_insert` comm target:** When the Python `insert_notebook_cell()` function runs in a Phase 2 environment, it opens a one-shot comm of this target name with a payload containing `source`, `cell_type`, `execute`, and `jiuwen_generated`. TypeScript receives this via `kernel.registerCommTarget()` and calls the `_handleCellInsert()` function, which uses `NotebookActions.insertBelow`, `setSource`, optional `changeCellType`, `setMetadata('jiuwen_generated', true)`, and optionally `NotebookActions.run()`.
+
+**Cell tagging:** Cells inserted via comm are tagged `cell.metadata.jiuwen_generated = true`. In Phase 1 environments (no frontend), the source is prepended with `# [jiuwen] Generated by JiuwenSwarm` so agent-generated code is identifiable in any environment.
 
 ### Shared-webview reuse
 

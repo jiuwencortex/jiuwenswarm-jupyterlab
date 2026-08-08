@@ -391,6 +391,80 @@ The agent streams a complete implementation. The student can run it immediately 
 
 ---
 
+## Example 10 — Debugging with `%jiuwen_error`
+
+**Scenario:** A data scientist is preprocessing a dataset and gets a cryptic KeyError.
+
+**Cell 1 — raises an error:**
+
+```python
+df["normalised"] = (df["revenue"] - df["revenue"].mean()) / df["revenue"].std()
+df["label_encoded"] = df["category"].map(label_map["category"])
+# KeyError: 'category'
+```
+
+**Cell 2 — send the error to the agent with one command:**
+
+```
+%jiuwen_error
+```
+
+The magic reads the full traceback and the failing cell source automatically, then sends them to the agent. Output:
+
+```
+[jiuwenswarm] Sending last error to agent…
+
+The key 'category' is missing from label_map. The dict only contains:
+{'product_type': ..., 'region': ...}
+
+You likely meant label_map["product_type"] — here is the corrected line:
+    df["label_encoded"] = df["category"].map(label_map["product_type"])
+
+Alternatively, if "category" should exist, check how label_map was built.
+```
+
+You can add your own note on the same line:
+
+```
+%jiuwen_error and also make sure NaN values in the column are handled
+```
+
+---
+
+## Example 11 — Configuring defaults with `%jiuwen_config`
+
+**Scenario:** A researcher always wants team mode and a longer timeout for this notebook, without typing flags on every cell.
+
+**One-time setup cell:**
+
+```
+%jiuwen_config mode=team timeout=600
+```
+
+Output:
+
+```
+mode          : team
+timeout       : 600
+inject_context: True
+model         : (from config.yaml)
+```
+
+From now on, every `%%jiuwen` cell in this notebook uses team mode with a 10-minute timeout by default. A cell can still override:
+
+```
+%%jiuwen --mode agent --timeout 30
+Quick one-sentence answer: what is a p-value?
+```
+
+View the current config at any time:
+
+```
+%jiuwen_config
+```
+
+---
+
 ## Summary — What works where
 
 **Does JiuwenSwarm need to be running as a separate process?**
@@ -402,14 +476,21 @@ No. Unlike the IDE plugin (which connects to a server on port 18092), this Jupyt
 | Extra setup beyond `pip install`? | Only for Phase 2 sidebar | No | No | No |
 | `%%jiuwen` cell magic | Yes | Yes | Yes | Yes |
 | `%jiuwen` line magic | Yes | Yes | Yes | Yes |
+| `%jiuwen_error` — forward last exception | Yes | Yes | Yes | Yes |
+| `%jiuwen_config` — per-notebook settings | Yes | Yes | Yes | Yes |
 | Context injection (variables, DataFrames) | Yes | Yes | Yes | Yes |
 | Named sessions | Yes | Yes | Yes | Yes |
+| Session persistence across kernel restarts | Yes | Yes | Yes | Yes |
 | Multi-agent team mode | Yes | Yes | Yes | Yes |
 | Streaming output in cell | Yes | Yes | Yes | Yes |
 | `read_variable()` | Yes | Yes | Yes | Yes |
 | `read_notebook_cell()` | Yes | Yes | Yes | Yes |
 | `insert_notebook_cell()` — display block fallback | Yes | Yes | Yes | Yes |
 | JupyterLab sidebar chat panel | Yes (Phase 2) | No | No | No |
+| Session list panel (sidebar) | Yes (Phase 2) | No | No | No |
+| Skills browser panel (sidebar) | Yes (Phase 2) | No | No | No |
 | Swarm map panel | Yes (Phase 2) | No | No | No |
 | `insert_notebook_cell()` — actual cell insertion | Yes (Phase 2 only) | No | No | No |
+| Agent-generated cell tagging (metadata) | Yes (Phase 2) | No | No | No |
+| Keyboard shortcuts (`Cmd+Shift+J` / `N`) | Yes (Phase 2) | No | No | No |
 | Status bar indicator | Yes (Phase 2) | No | No | No |
