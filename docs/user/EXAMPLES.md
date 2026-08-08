@@ -7,34 +7,42 @@ They are written as stories: what you do, what you type, and what you get back.
 
 ## Before you start — what needs to be installed
 
-**You do not need to start a JiuwenSwarm server.** This is different from the IDE plugin.
+**You do not need to run `jiuwenswarm-start`.** This is the key difference from the IDE plugin.
 
-The IDE plugin (VS Code, JetBrains) connects to a JiuwenSwarm server that runs separately on your machine — you have to start it, and if it is not running, the plugin shows "disconnected". The Jupyter integration works differently: it imports JiuwenSwarm directly as a Python library into the same process as your notebook. Nothing else needs to be running.
+### How the IDE plugin works vs how this works
 
-The only things you need:
+The IDE plugin (VS Code, JetBrains) connects to a JiuwenSwarm **server** that you start with `jiuwenswarm-start`. That server runs as a separate process, manages the web UI, listens on channels (Slack, Discord, etc.), and exposes a WebSocket endpoint that the IDE plugin connects to. If the server is not running, the plugin shows "disconnected" and cannot do anything.
+
+The Jupyter integration works completely differently. `JiuWenSwarm` is also a Python class — and when you `pip install jiuwenswarm`, that class is available as a regular library. When you load the extension in a notebook, it instantiates `JiuWenSwarm()` directly inside the notebook's Python process. The agent runtime starts up inside the kernel — no separate process, no port, no WebSocket. The same thing that `jiuwenswarm-start` does for the server, the notebook kernel does for itself, on demand.
+
+Think of it like this:
+- **`jiuwenswarm-start`** = starts a production server with everything: web UI, all channels, WebSocket for IDE, multi-user sessions
+- **`%load_ext jiuwenswarm_jupyter`** = boots just the agent runtime inside your notebook's Python process, nothing else
+
+### What you need
 
 ```bash
-# 1. Install the main JiuwenSwarm package
-pip install jiuwenswarm
+# 1. Install JiuwenSwarm and the Jupyter integration
+pip install jiuwenswarm jiuwenswarm-jupyter
 
-# 2. Install the Jupyter integration
-pip install jiuwenswarm-jupyter
+# 2. One-time workspace setup (only needed once per machine)
+#    Creates ~/.jiuwenswarm/ with default config and directory structure
+jiuwenswarm-init
 
-# 3. Make sure you have a config file at ~/.jiuwenswarm/config/config.yaml
-#    This is created the first time you configure JiuwenSwarm (API keys, model settings).
-#    If you already use the CLI or IDE plugin, you already have this file.
+# 3. Add your API keys to ~/.jiuwenswarm/config/.env
+#    (same file used by the CLI and IDE plugin — skip this if you already did it)
 ```
 
-That is all. When you run `%load_ext jiuwenswarm_jupyter` in a cell, it loads JiuwenSwarm into the notebook's Python process directly — no port, no server to start, no daemon in the background.
+That is all. After this, `%load_ext jiuwenswarm_jupyter` in any notebook starts the agent inside the kernel. No server to start, no port to check, nothing running in the background.
 
 **Which parts need what:**
 
 | What you want to use | What you need |
 |---|---|
-| `%%jiuwen` cell magic, `%jiuwen`, Python API, `read_variable`, `read_notebook_cell`, `insert_notebook_cell` | `pip install jiuwenswarm jiuwenswarm-jupyter` only |
+| `%%jiuwen` magic, `%jiuwen`, Python API, Phase 3 tools | `pip install` + `jiuwenswarm-init` (one-time) |
 | JupyterLab sidebar chat panel, swarm map | The above + build the TypeScript frontend (see [PUBLISHING.md](../operations/PUBLISHING.md)) |
 
-The examples below that say "JupyterLab in Chrome" work with just `pip install`. You do not need to build anything for them.
+The examples below all work with just `pip install` + `jiuwenswarm-init`. You do not need to build anything for them.
 
 ---
 
