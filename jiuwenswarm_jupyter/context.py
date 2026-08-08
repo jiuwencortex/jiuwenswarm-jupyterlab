@@ -44,6 +44,10 @@ def build_context_block(ip) -> str:
     if cell_section:
         parts.append(cell_section)
 
+    pkg_section = _extract_key_packages()
+    if pkg_section:
+        parts.append(pkg_section)
+
     if not parts:
         return ""
 
@@ -134,6 +138,40 @@ def _summarize_dataframe(df: Any) -> str:
         return f"shape={shape}, dtypes=[{dtype_summary}]\n```\n{head_str}\n```"
     except Exception:
         return "<DataFrame — error summarizing>"
+
+
+# ── Installed packages ───────────────────────────────────────────────────────
+
+# Data-science packages worth reporting if imported; agent uses this to know
+# which APIs are available without having to ask.
+_INTERESTING_PACKAGES = {
+    "pandas", "numpy", "scipy", "sklearn", "xgboost", "lightgbm", "catboost",
+    "torch", "tensorflow", "keras", "jax", "transformers", "datasets",
+    "matplotlib", "seaborn", "plotly", "altair", "bokeh",
+    "sqlalchemy", "psycopg2", "pymongo", "redis",
+    "requests", "httpx", "aiohttp",
+    "pydantic", "fastapi", "flask", "django",
+    "PIL", "cv2", "librosa", "nltk", "spacy",
+}
+
+
+def _extract_key_packages() -> str:
+    """Return a one-line summary of relevant imported packages and their versions."""
+    try:
+        found: list[str] = []
+        for pkg in sorted(_INTERESTING_PACKAGES):
+            mod = sys.modules.get(pkg)
+            if mod is None:
+                # Some packages use a different top-level name
+                continue
+            version = getattr(mod, "__version__", None) or getattr(mod, "VERSION", None)
+            found.append(f"{pkg}=={version}" if version else pkg)
+
+        if not found:
+            return ""
+        return "**Imported packages:** " + ", ".join(found)
+    except Exception:
+        return ""
 
 
 # ── Cell history extraction ───────────────────────────────────────────────────

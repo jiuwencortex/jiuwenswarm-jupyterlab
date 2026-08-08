@@ -2,13 +2,15 @@
 
 ## Overview
 
-`jiuwenswarm-jupyterlab` provides two surfaces for running JiuwenSwarm inside Jupyter:
+`jiuwenswarm-jupyterlab` provides three layers on top of JiuwenSwarm:
 
-1. **Python package (`jiuwenswarm_jupyter`)** — in-process API and `%%jiuwen` cell magic. Works in any Jupyter environment (JupyterLab, classic Notebook, VS Code Notebooks, Google Colab, Kaggle).
+1. **Phase 1 — Python package (`jiuwenswarm_jupyter`)** — in-process API and `%%jiuwen` cell magic. Works in any Jupyter environment (JupyterLab, classic Notebook, VS Code Notebooks, Google Colab, Kaggle).
 
-2. **JupyterLab frontend extension (`@jiuwenswarm/jupyterlab`)** — TypeScript sidebar panel with persistent chat UI and swarm map, embedded as iframes loaded from the shared-webview HTML files.
+2. **Phase 2 — JupyterLab frontend extension (`@jiuwenswarm/jupyterlab`)** — TypeScript sidebar panel with persistent chat UI and swarm map, embedded as iframes loaded from the shared-webview HTML files. Communication uses Jupyter comm (in-process, no external server).
 
-Both surfaces call the same in-process `JiuWenSwarm` facade; no external server or WebSocket is required.
+3. **Phase 3 — Notebook-native tools** — `read_variable`, `read_notebook_cell`, `insert_notebook_cell` let the agent inspect and modify notebook state directly.
+
+All three phases call the same in-process `JiuWenSwarm` facade; no external server or WebSocket is required.
 
 ---
 
@@ -16,13 +18,16 @@ Both surfaces call the same in-process `JiuWenSwarm` facade; no external server 
 
 ```
 jiuwenswarm-jupyterlab/
-├── jiuwenswarm_jupyter/         Python package (Phase 1 core)
-│   ├── __init__.py              load_ipython_extension entry point
-│   ├── magic.py                 %%jiuwen / %jiuwen cell magic
-│   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm
-│   ├── context.py               Notebook context extractor
-│   ├── display.py               IPython streaming output renderer
-│   └── session.py               Session ID management + registry
+├── jiuwenswarm_jupyter/         Python package
+│   ├── __init__.py              Extension entry point; wires Phase 1+2+3 on load
+│   ├── magic.py                 %%jiuwen / %jiuwen cell magic           [Phase 1]
+│   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm [Phase 1]
+│   ├── context.py               Notebook context extractor              [Phase 1]
+│   ├── display.py               IPython streaming output renderer       [Phase 1]
+│   ├── session.py               Session ID management + registry        [Phase 1]
+│   ├── comm_handler.py          Kernel comm target + event streaming    [Phase 2]
+│   └── notebook_tools.py        read_variable / read_notebook_cell /   [Phase 3]
+│                                insert_notebook_cell
 │
 ├── packages/
 │   ├── shared-webview/          Copied from jiuwenswarm-ide + Jupyter bridge patch
@@ -135,24 +140,86 @@ Incoming events (from the Python kernel via comm) are forwarded to the iframe as
 
 ### Kernel comm protocol
 
-The Python kernel side registers a `jiuwenswarm` comm target:
+`comm_handler.py` registers the `jiuwenswarm` comm target when `load_ipython_extension` runs. It tries two registration paths to support all Jupyter versions:
 
-```python
-# Python side (in jiuwenswarm_jupyter, Phase 2)
-def _register_comm_target(kernel):
-    @kernel.comm_info('jiuwenswarm')
-    def target(comm, open_msg):
-        @comm.on_msg
-        def receive(msg):
-            data = msg['content']['data']
-            # Route to JupyterSwarm, stream events back via comm.send()
+```
+1. comm package (JupyterLab 4+ / Jupyter 7+):
+   comm.get_comm_manager().register_target("jiuwenswarm", handler)
+
+2. ipykernel legacy (classic Notebook / older JupyterLab):
+   kernel.comm_manager.register_target("jiuwenswarm", handler)
 ```
 
-The event schema is identical to the IDE WebSocket events (`chat.delta`, `chat.final`, `tool.call`, `tool.result`, `swarm_snapshot`, etc.), so the shared-webview HTML requires no changes to handle them.
+Once registered, the flow for each user message is:
+
+```
+TypeScript ChatPanel
+    │  comm.send({ type: "send_message", query, mode, session_id })
+    ▼
+comm_handler._handle_send_message()
+    │  builds full_query (with context if inject_context=True)
+    │  calls JiuWenSwarm.process_message_stream()
+    │
+    ├─ chat.delta  → comm.send({ type: "chat.delta", delta: "..." })
+    ├─ tool.call   → comm.send({ type: "tool.call", name: "...", args: {} })
+    ├─ tool.result → comm.send({ type: "tool.result", result: "..." })
+    ├─ team.*      → comm.send({ type: "team.member.spawned", ... })
+    └─ chat.final  → comm.send({ type: "chat.final", text: "..." })
+    ▼
+TypeScript KernelCommClient
+    │  forwards every event to ChatPanel via window.postMessage
+    ▼
+chat.html (iframe)
+    │  handleHostMessage(event) — same handler as VS Code / JetBrains
+    ▼
+UI renders streamed response
+```
+
+The event schema is identical to the IDE WebSocket events, so `chat.html` and `swarm_map.html` require no changes.
+
+Cancel is handled via `comm.send({ type: "cancel", session_id })` which calls `asyncio.Task.cancel()` on the running stream.
 
 ### Distribution
 
 The extension is distributed as a Python package that bundles the built TypeScript frontend. The `pyproject.toml` `[tool.hatch.build.targets.wheel.shared-data]` section copies `packages/frontend/dist/` to `share/jupyter/labextensions/@jiuwenswarm/jupyterlab/`. JupyterLab discovers the extension automatically from that path.
+
+---
+
+## Phase 3: Notebook-native tools
+
+`notebook_tools.py` provides three functions that operate directly on the live notebook kernel state.
+
+### `read_notebook_cell(cell_index)`
+
+Reads from `ip.history_manager.get_tail()` (execution history) and `ip.user_ns["Out"]` (output dict).  Returns a dict with `source`, `output`, and `line_number`.
+
+### `read_variable(name)`
+
+Reads from `ip.user_ns[name]`.  Dispatches to type-specific formatters:
+- `DataFrame` → shape, dtypes, `.head(5)`, `.describe()`
+- `ndarray` → shape, dtype, min/max/mean, first values
+- `dict` / `list` → length + JSON preview
+- anything else → `repr()` truncated to 3000 chars
+
+### `insert_notebook_cell(source, cell_type, execute)`
+
+Two paths:
+
+```
+Phase 2 active (JupyterLab sidebar connected):
+    comm.create_comm("jiuwenswarm_cell_insert").open(payload)
+    → TypeScript frontend receives comm_open message
+    → uses JupyterLab notebook API to insert the cell
+    → optionally executes it immediately
+
+Phase 1 only (no sidebar):
+    IPython.display.HTML renders the source as a formatted
+    code block in the cell output area with a copy hint
+```
+
+### Tool schema
+
+`TOOL_DEFINITIONS` in `notebook_tools.py` is a list of JSON Schema tool definitions matching the agent's tool-calling format. `get_dispatcher()` returns a `dict[name → callable]` for direct integration with `JiuWenSwarm`.
 
 ---
 
@@ -165,6 +232,8 @@ The extension is distributed as a Python package that bundles the built TypeScri
 | JetBrains bridge | `window.__jb_send` / JCEF | not applicable |
 | JupyterLab bridge | not applicable | `window.__jupyter_send` / postMessage |
 | Shared-webview HTML | source | copied + bridge patch |
-| Context collection | active editor file, workspace | notebook variables, cell history |
+| Context collection | active editor file, workspace | notebook variables, cell history, imported packages |
 | Session ID prefix | `vscode_*` / `jb_*` | `jupyter_*` |
 | Agent API | `JiuWenSwarm` via WebSocket | `JiuWenSwarm` direct in-process |
+| Notebook tools | not applicable | `read_variable`, `read_notebook_cell`, `insert_notebook_cell` |
+| Cell insertion | diff/patch to file | comm → JupyterLab notebook API (Phase 2) or display block (Phase 1) |
