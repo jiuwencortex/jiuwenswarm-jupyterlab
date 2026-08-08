@@ -15,6 +15,7 @@ Public API:
     read_variable         — inspect any notebook variable (Phase 3)
     read_notebook_cell    — read source + output of any cell (Phase 3)
     insert_notebook_cell  — insert a new cell into the notebook (Phase 3)
+    replace_notebook_cell — rewrite an existing cell with a diff dialog (Phase 3)
     show_jiuwen_panel     — ipywidgets interactive control panel (requires ipywidgets)
 
 Magics registered on load:
@@ -28,7 +29,7 @@ Magics registered on load:
 from .client import JupyterSwarm
 from .config import JiuwenConfig, get_config
 from .session import get_default_swarm
-from .notebook_tools import read_variable, read_notebook_cell, insert_notebook_cell
+from .notebook_tools import read_variable, read_notebook_cell, insert_notebook_cell, replace_notebook_cell
 from .widgets import show_jiuwen_panel
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     "read_variable",
     "read_notebook_cell",
     "insert_notebook_cell",
+    "replace_notebook_cell",
     "show_jiuwen_panel",
 ]
 __version__ = "0.1.0"

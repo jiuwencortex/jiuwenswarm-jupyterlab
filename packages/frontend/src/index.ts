@@ -23,6 +23,7 @@ import {
 } from '@jupyterlab/application';
 import { ICommandPalette, MainAreaWidget, WidgetTracker, showDialog, Dialog } from '@jupyterlab/apputils';
 import { INotebookTracker, NotebookActions } from '@jupyterlab/notebook';
+import { Widget } from '@lumino/widgets';
 import { IStatusBar } from '@jupyterlab/statusbar';
 
 import { KernelCommClient } from './WsClient';
@@ -88,6 +89,81 @@ async function _handleCellInsert(
 }
 
 // ---------------------------------------------------------------------------
+// Cell-replace handler (comm → diff dialog → NotebookActions)
+// ---------------------------------------------------------------------------
+
+/** Escape HTML special characters for safe injection into innerHTML. */
+function _escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Build a simple before/after HTML diff view for the showDialog body.
+ * Shows old source with a red tint and new source with a green tint.
+ */
+function _buildDiffHtml(oldSource: string, newSource: string): string {
+  const preStyle =
+    'font-family: monospace; font-size: 12px; white-space: pre-wrap; ' +
+    'padding: 8px; border-radius: 4px; margin: 4px 0; max-height: 220px; ' +
+    'overflow: auto; word-break: break-all;';
+  const labelStyle = 'font-size: 11px; font-weight: 600; color: #666; margin-top: 8px;';
+  return (
+    `<div style="${labelStyle}">BEFORE</div>` +
+    `<div style="${preStyle} background: #2d1a1a; color: #f8c8c8;">${_escapeHtml(oldSource)}</div>` +
+    `<div style="${labelStyle}">AFTER</div>` +
+    `<div style="${preStyle} background: #1a2d1a; color: #c8f8c8;">${_escapeHtml(newSource)}</div>`
+  );
+}
+
+async function _handleCellReplace(
+  data: Record<string, any>,
+  tracker: INotebookTracker,
+): Promise<void> {
+  const notebookPanel = tracker.currentWidget;
+  if (!notebookPanel) {
+    console.warn('[jiuwenswarm] cell_replace: no active notebook');
+    return;
+  }
+  const notebook = notebookPanel.content;
+  const oldSource: string = (data.old_source ?? '').trim();
+  const newSource: string = data.new_source ?? '';
+
+  // Find the cell whose source content matches old_source
+  let targetIndex = -1;
+  const cellCount = notebook.model?.cells.length ?? 0;
+  for (let i = 0; i < cellCount; i++) {
+    const src = notebook.model!.cells.get(i).sharedModel.getSource().trim();
+    if (src === oldSource) {
+      targetIndex = i;
+      break;
+    }
+  }
+
+  if (targetIndex === -1) {
+    console.warn('[jiuwenswarm] cell_replace: no cell matched old_source');
+    return;
+  }
+
+  // Show before/after diff in a dialog and ask the user to confirm
+  const diffWidget = new Widget();
+  diffWidget.node.innerHTML = _buildDiffHtml(data.old_source ?? '', newSource);
+  diffWidget.node.style.minWidth = '520px';
+
+  const result = await showDialog({
+    title: 'Apply cell rewrite?',
+    body: diffWidget,
+    buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Apply' })],
+  });
+
+  if (result.button.accept) {
+    notebook.model!.cells.get(targetIndex).sharedModel.setSource(newSource);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Plugin definition
 // ---------------------------------------------------------------------------
 
@@ -123,6 +199,14 @@ const extension: JupyterFrontEndPlugin<void> = {
           comm.onMsg = async (message) => {
             const data = message.content.data as Record<string, any>;
             await _handleCellInsert(data, tracker);
+          };
+        });
+
+        // Register the cell-replace comm target (diff dialog → apply)
+        kernel.registerCommTarget('jiuwenswarm_cell_replace', (comm, msg) => {
+          comm.onMsg = async (message) => {
+            const data = message.content.data as Record<string, any>;
+            await _handleCellReplace(data, tracker);
           };
         });
 

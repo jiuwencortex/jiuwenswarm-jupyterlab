@@ -283,7 +283,7 @@ When the agent inserts a cell via `insert_notebook_cell` and the JupyterLab fron
 
 ## Phase 3 — Notebook-native tools
 
-These three tools are available from any cell as plain Python functions — no magic needed.
+These four tools are available from any cell as plain Python functions — no magic needed.
 
 ### `read_variable(name)`
 
@@ -345,6 +345,22 @@ insert_notebook_cell(
 
 - In **JupyterLab with the sidebar panel active (Phase 2)**: the cell appears immediately in the notebook. With `confirm_execute=True`, a "Run generated cell?" dialog is shown before execution.
 - In **any other environment (Phase 1)**: the code is displayed as a formatted block in the output area. With `confirm_execute=True`, the user is prompted via `input()`.
+
+### `replace_notebook_cell(cell_index, new_source)`
+
+Rewrite an existing cell, showing a before/after diff for review before applying:
+
+```python
+from jiuwenswarm_jupyter import replace_notebook_cell
+
+# Propose a rewrite of cell 3 — user must confirm before it is applied
+replace_notebook_cell(3, "df = df.dropna(subset=['target'])")
+```
+
+- In **JupyterLab with the sidebar panel active (Phase 2)**: a diff dialog appears showing the old cell source (red) and the proposed replacement (green). Click **Apply** to update the cell or **Cancel** to discard.
+- In **any other environment (Phase 1)**: a coloured unified diff is rendered in the cell output area. The user must apply the change manually by editing the cell.
+
+`cell_index` uses the same zero-based execution-history scale as `read_notebook_cell` — pass the same index you would use to read the cell you want to rewrite.
 
 ### When the agent uses these tools
 
@@ -439,3 +455,6 @@ The comm target was not registered. Make sure `%load_ext jiuwenswarm_jupyter` ru
 
 **`insert_notebook_cell` shows a block instead of inserting**
 This is the Phase 1 fallback — the cell cannot be inserted directly unless the JupyterLab sidebar panel is active (Phase 2). Copy the displayed code and paste it into a new cell.
+
+**`replace_notebook_cell` shows a diff instead of a dialog**
+Same Phase 1 fallback — the diff is displayed in the output area as a coloured before/after view. Apply the change manually by editing the cell and re-running it.

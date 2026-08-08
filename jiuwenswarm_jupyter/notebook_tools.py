@@ -17,6 +17,11 @@ Three tools the agent can invoke when running inside a Jupyter notebook:
         In Phase 1 (magic-only) it is displayed in the output area so the
         user can copy it.
 
+    replace_notebook_cell(cell_index, new_source)
+        Rewrite an existing cell identified by its execution history index.
+        Shows a before/after diff.  In Phase 2 the user sees an Apply/Cancel
+        dialog in JupyterLab; in Phase 1 the diff is rendered in the output.
+
 Usage — direct call from a cell:
 
     from jiuwenswarm_jupyter import read_variable, read_notebook_cell
@@ -192,6 +197,69 @@ def insert_notebook_cell(
     return "Cell displayed in output area. Copy it into a new cell to run it."
 
 
+# ── replace_notebook_cell ─────────────────────────────────────────────────────
+
+def replace_notebook_cell(cell_index: int, new_source: str, ip=None) -> str:
+    """Rewrite an existing notebook cell, showing a diff before applying.
+
+    Identifies the cell by its execution history index — the same index
+    returned by :func:`read_notebook_cell`.
+
+    In Phase 2 (JupyterLab sidebar active): sends the old and new source to
+    the TypeScript frontend, which shows a diff dialog with Apply/Cancel.
+
+    In Phase 1 (magic only): renders a coloured unified diff in the cell
+    output area so the user can review and apply the change manually.
+
+    Parameters
+    ----------
+    cell_index:
+        Zero-based position in execution history (same scale as
+        ``read_notebook_cell``).
+    new_source:
+        The replacement source code.
+    ip:
+        IPython shell.  Auto-detected if None.
+
+    Returns
+    -------
+    Status message string.
+    """
+    ip = _get_ip(ip)
+    if ip is None:
+        return "Error: No active IPython shell found."
+
+    if not new_source.strip():
+        return "Error: new_source is empty."
+
+    try:
+        history = list(ip.history_manager.get_tail(1000, include_latest=True))
+    except Exception as exc:
+        return f"Error reading cell history: {exc}"
+
+    if not history:
+        return "Error: No cell history available yet. Execute some cells first."
+
+    if cell_index < 0 or cell_index >= len(history):
+        return (
+            f"Error: cell_index {cell_index} is out of range. "
+            f"Valid range: 0 to {len(history) - 1}."
+        )
+
+    _session, line_no, old_source = history[cell_index]
+
+    if old_source.strip() == new_source.strip():
+        return "No changes: new_source is identical to the current cell."
+
+    # Phase 2 path: interactive diff dialog in JupyterLab
+    if _comm_replace(old_source, new_source, line_no):
+        return "Diff dialog opened in JupyterLab. Click Apply to replace the cell."
+
+    # Phase 1 fallback: render diff in the output area
+    _display_diff(old_source, new_source)
+    return "Diff displayed above. Update the cell source manually to apply the change."
+
+
 # ── Tool schema (for agent registration) ─────────────────────────────────────
 
 TOOL_DEFINITIONS: list[dict] = [
@@ -266,6 +334,32 @@ TOOL_DEFINITIONS: list[dict] = [
             "required": ["source"],
         },
     },
+    {
+        "name": "replace_notebook_cell",
+        "description": (
+            "Rewrite an existing notebook cell with new source code, showing a diff before applying. "
+            "Use this instead of insert_notebook_cell when you want to fix or improve code the user "
+            "already has in a cell. The user must approve the change via a dialog (Phase 2) or "
+            "review the diff in the output area (Phase 1)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cell_index": {
+                    "type": "integer",
+                    "description": (
+                        "Zero-based index into execution history — the same value "
+                        "returned by read_notebook_cell."
+                    ),
+                },
+                "new_source": {
+                    "type": "string",
+                    "description": "The complete replacement source code for the cell.",
+                },
+            },
+            "required": ["cell_index", "new_source"],
+        },
+    },
 ]
 
 
@@ -284,6 +378,9 @@ def get_dispatcher(ip=None) -> dict[str, Any]:
         "read_variable": lambda name: read_variable(name, ip=_ip),
         "insert_notebook_cell": lambda source, cell_type="code", execute=False, confirm_execute=False: insert_notebook_cell(
             source, cell_type=cell_type, execute=execute, confirm_execute=confirm_execute, ip=_ip
+        ),
+        "replace_notebook_cell": lambda cell_index, new_source: replace_notebook_cell(
+            cell_index, new_source, ip=_ip
         ),
     }
 
@@ -417,3 +514,72 @@ def _display_proposed_cell(source: str, cell_type: str) -> None:
         ))
     except Exception:
         print(f"\n--- Generated {cell_type} cell (JiuwenSwarm) ---\n{tagged_source}\n--- end ---\n")
+
+
+def _comm_replace(old_source: str, new_source: str, line_no: int) -> bool:
+    """Try to send a cell-replace request via Jupyter comm (Phase 2 path). Returns True on success.
+
+    Sends ``{type, old_source, new_source, line_no}`` to the
+    ``jiuwenswarm_cell_replace`` comm target registered in TypeScript.
+    The frontend finds the matching cell by ``old_source`` content, shows
+    a diff dialog, and applies ``new_source`` on Apply.
+    """
+    try:
+        import comm as _comm_pkg
+        c = _comm_pkg.create_comm(target_name="jiuwenswarm_cell_replace")
+        c.open({
+            "type": "replace_cell",
+            "old_source": old_source,
+            "new_source": new_source,
+            "line_no": line_no,
+        })
+        return True
+    except Exception:
+        return False
+
+
+def _display_diff(old_source: str, new_source: str) -> None:
+    """Render a coloured unified diff in the output area (Phase 1 fallback)."""
+    import difflib
+    import html as _html
+
+    old_lines = old_source.splitlines(keepends=True)
+    new_lines = new_source.splitlines(keepends=True)
+    diff_lines = list(difflib.unified_diff(
+        old_lines,
+        new_lines,
+        fromfile="current cell",
+        tofile="proposed replacement",
+        lineterm="",
+    ))
+
+    if not diff_lines:
+        return
+
+    def _line_html(line: str) -> str:
+        escaped = _html.escape(line.rstrip("\n"))
+        if line.startswith("+") and not line.startswith("+++"):
+            bg, fg = "#1a4a1a", "#a8d8a8"
+        elif line.startswith("-") and not line.startswith("---"):
+            bg, fg = "#4a1a1a", "#d8a8a8"
+        elif line.startswith("@@"):
+            bg, fg = "#1a2a4a", "#a8c8f8"
+        else:
+            bg, fg = "#1e1e1e", "#c8c8c8"
+        return (
+            f"<div style='background:{bg}; color:{fg}; padding:1px 8px; "
+            f"font-family:monospace; font-size:12.5px; white-space:pre'>{escaped}</div>"
+        )
+
+    body_html = "".join(_line_html(ln) for ln in diff_lines)
+    try:
+        from IPython.display import display, HTML
+        display(HTML(
+            f"<div style='border:1px solid #555; border-radius:4px; margin:6px 0; overflow:auto'>"
+            f"<div style='font-size:11px; color:#888; padding:6px 8px; font-weight:600; background:#111'>"
+            f"&#9651; JiuwenSwarm — proposed cell rewrite (Phase 1: apply manually)</div>"
+            f"{body_html}"
+            f"</div>"
+        ))
+    except Exception:
+        print("".join(diff_lines))
