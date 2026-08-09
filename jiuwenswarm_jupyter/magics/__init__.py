@@ -16,32 +16,38 @@ magics/
 │   └── memory.py  %jiuwen_memory
 │
 ├── analysis/      — code intelligence, safety, profiling, generation
-│   ├── explain.py   %%jiuwen_explain
-│   ├── test_gen.py  %%jiuwen_test
-│   ├── audit.py     %jiuwen_audit
-│   ├── story.py     %jiuwen_story
-│   ├── profile.py   %%jiuwen_profile
-│   ├── guard.py     %%jiuwen_guard
-│   ├── safe.py      %%jiuwen_safe
-│   ├── todo.py      %jiuwen_todo
-│   ├── diff.py      %jiuwen_diff
-│   ├── doc.py       %%jiuwen_doc
-│   └── benchmark.py %%jiuwen_benchmark
+│   ├── explain.py    %%jiuwen_explain
+│   ├── test_gen.py   %%jiuwen_test
+│   ├── audit.py      %jiuwen_audit
+│   ├── story.py      %jiuwen_story
+│   ├── profile.py    %%jiuwen_profile
+│   ├── guard.py      %%jiuwen_guard
+│   ├── safe.py       %%jiuwen_safe
+│   ├── todo.py       %jiuwen_todo
+│   ├── diff.py       %jiuwen_diff
+│   ├── doc.py        %%jiuwen_doc
+│   ├── benchmark.py  %%jiuwen_benchmark
+│   ├── fix.py        %jiuwen_fix
+│   ├── optimize.py   %%jiuwen_optimize
+│   └── translate.py  %%jiuwen_translate
 │
-├── data/          — data science: EDA, schema, features, SQL, viz
-│   ├── eda.py       %jiuwen_eda
-│   ├── schema.py    %jiuwen_schema
+├── data/          — data science: EDA, schema, features, SQL, viz, mock, compare
+│   ├── eda.py        %jiuwen_eda
+│   ├── schema.py     %jiuwen_schema
 │   ├── hypothesis.py %jiuwen_hypothesis
-│   ├── features.py  %jiuwen_features
-│   ├── leakage.py   %jiuwen_leakage
-│   ├── df_magic.py  %%jiuwen_df
-│   ├── sql.py       %%jiuwen_sql
-│   └── viz.py       %%jiuwen_viz
+│   ├── features.py   %jiuwen_features
+│   ├── leakage.py    %jiuwen_leakage
+│   ├── df_magic.py   %%jiuwen_df
+│   ├── sql.py        %%jiuwen_sql
+│   ├── viz.py        %%jiuwen_viz
+│   ├── mock.py       %jiuwen_mock
+│   └── compare.py    %jiuwen_compare
 │
-└── workflow/      — experiment lifecycle: tracking, reproduction, model cards
+└── workflow/      — experiment lifecycle: tracking, reproduction, model cards, suggestions
     ├── track.py     %jiuwen_track
     ├── reproduce.py %jiuwen_reproduce
-    └── card.py      %jiuwen_card
+    ├── card.py      %jiuwen_card
+    └── suggest.py   %jiuwen_suggest
 
 Each leaf module exposes a ``register(ip)`` function.
 Each sub-package exposes a ``register_all(ip)`` function.

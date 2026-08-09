@@ -1,10 +1,10 @@
-"""Experiment lifecycle magics — tracking, reproduction, and model documentation."""
+"""Experiment lifecycle magics — tracking, reproduction, model documentation, and next-step suggestions."""
 
 from __future__ import annotations
 
-from . import card, reproduce, track
+from . import card, reproduce, suggest, track
 
-__all__ = ["register_all", "track", "reproduce", "card"]
+__all__ = ["register_all", "track", "reproduce", "card", "suggest"]
 
 
 def register_all(ip) -> None:
@@ -12,3 +12,4 @@ def register_all(ip) -> None:
     track.register(ip)
     reproduce.register(ip)
     card.register(ip)
+    suggest.register(ip)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import audit, benchmark, diff, doc, explain, guard, profile, safe, story, test_gen, todo
+from . import audit, benchmark, diff, doc, explain, fix, guard, optimize, profile, safe, story, test_gen, todo, translate
 
 __all__ = [
     "register_all",
@@ -11,12 +11,15 @@ __all__ = [
     "diff",
     "doc",
     "explain",
+    "fix",
     "guard",
+    "optimize",
     "profile",
     "safe",
     "story",
     "test_gen",
     "todo",
+    "translate",
 ]
 
 
@@ -33,3 +36,6 @@ def register_all(ip) -> None:
     diff.register(ip)
     doc.register(ip)
     benchmark.register(ip)
+    fix.register(ip)
+    optimize.register(ip)
+    translate.register(ip)

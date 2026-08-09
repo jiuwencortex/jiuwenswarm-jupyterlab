@@ -46,6 +46,9 @@ Load the extension first:
 | [`%jiuwen_diff`](#jiuwen_diff) | line | Diff against a git ref and get agent commentary |
 | [`%%jiuwen_doc`](#jiuwen_doc) | cell | Generate and insert a complete docstring for any function or class |
 | [`%%jiuwen_benchmark`](#jiuwen_benchmark) | cell | Benchmark multiple implementations and explain the results |
+| [`%jiuwen_fix`](#jiuwen_fix) | line | Fix the last error by rewriting the failing cell in-place |
+| [`%%jiuwen_optimize`](#jiuwen_optimize) | cell | Rewrite a slow cell with vectorized code, replacing it in-place |
+| [`%%jiuwen_translate`](#jiuwen_translate) | cell | Translate code to a different data library (polars, dask, spark, …) |
 
 ### Data
 
@@ -59,6 +62,8 @@ Load the extension first:
 | [`%%jiuwen_df`](#jiuwen_df) | cell | Natural-language DataFrame query — generates and runs pandas code |
 | [`%%jiuwen_sql`](#jiuwen_sql) | cell | Natural-language SQL query over in-memory DataFrames via DuckDB |
 | [`%%jiuwen_viz`](#jiuwen_viz) | cell | Natural-language chart description — generates complete visualization code |
+| [`%jiuwen_mock`](#jiuwen_mock) | line | Generate synthetic data that mirrors a real DataFrame's schema |
+| [`%jiuwen_compare`](#jiuwen_compare) | line | Statistical comparison and drift report for two DataFrames |
 
 ### Workflow
 
@@ -67,6 +72,7 @@ Load the extension first:
 | [`%jiuwen_track`](#jiuwen_track) | line | Log experiments and compare runs |
 | [`%jiuwen_reproduce`](#jiuwen_reproduce) | line | Convert a notebook into a standalone Python script |
 | [`%jiuwen_card`](#jiuwen_card) | line | Generate a structured model card for any trained model |
+| [`%jiuwen_suggest`](#jiuwen_suggest) | line | Analyze notebook state and propose prioritized next steps |
 
 ---
 
@@ -642,6 +648,105 @@ totals = (df["price"] * df["qty"]).tolist()
 
 ---
 
+### `%jiuwen_fix`
+
+Fix the last Python error by reading the traceback and the source of the failing cell, then asking the agent to rewrite the cell with a corrected version. The fixed cell replaces the original in-place.
+
+**Arguments**
+
+| Argument | Description |
+|---|---|
+| `HINT` | Optional free-text hint for the agent (e.g. `"the column is str not int"`) |
+
+**Examples**
+
+```python
+%jiuwen_fix
+```
+
+```python
+%jiuwen_fix the customer_id column is string, not integer
+```
+
+```python
+%jiuwen_fix avoid inplace=True, use assignment instead
+```
+
+```python
+%jiuwen_fix the merge should be a left join, not inner
+```
+
+---
+
+### `%%jiuwen_optimize`
+
+Rewrite the cell body for speed and memory efficiency, replacing the original cell in-place. The agent identifies bottlenecks — `iterrows`, Python loops, redundant copies — and returns a vectorized drop-in replacement.
+
+**Options**
+
+| Flag | Description |
+|---|---|
+| `--profile` | Run cProfile on the original cell first and include stats in the prompt |
+| `--no-replace` | Stream the optimized version to output instead of replacing the cell |
+
+**Examples**
+
+```
+%%jiuwen_optimize
+for idx, row in df.iterrows():
+    df.loc[idx, 'score'] = row['a'] * 2 + row['b']
+```
+
+```
+%%jiuwen_optimize --profile
+result = []
+for i in range(len(df)):
+    result.append(heavy_transform(df.iloc[i]))
+```
+
+```
+%%jiuwen_optimize --no-replace
+counts = {}
+for val in df['category']:
+    counts[val] = counts.get(val, 0) + 1
+```
+
+---
+
+### `%%jiuwen_translate`
+
+Translate the cell body to a different data-processing library. The agent produces a complete, runnable equivalent and inserts it as a new cell. The original cell is kept.
+
+**Options**
+
+| Flag | Description |
+|---|---|
+| `--to LIBRARY` | Target library (required): `polars`, `dask`, `spark`, `torch`, `sql`, `modin`, `jax`, `cudf`, `vaex`, `numpy` |
+
+**Examples**
+
+```
+%%jiuwen_translate --to polars
+df_agg = df.groupby("region").agg({"revenue": "sum", "orders": "count"}).reset_index()
+```
+
+```
+%%jiuwen_translate --to sql
+result = df[df["age"] > 30].sort_values("revenue", ascending=False).head(20)
+```
+
+```
+%%jiuwen_translate --to dask
+result = df.merge(other, on="customer_id").groupby("segment")["amount"].mean()
+```
+
+```
+%%jiuwen_translate --to spark
+pivoted = df.pivot_table(index="month", columns="product", values="revenue", aggfunc="sum")
+```
+
+---
+
 ## Data
 
 ### `%jiuwen_eda`
@@ -893,6 +998,70 @@ Time series of daily_active_users with a 7-day rolling average overlay.
 
 ---
 
+### `%jiuwen_mock`
+
+Generate a synthetic DataFrame that mirrors the schema of an existing one — matching dtypes, value ranges, cardinality, null rates, and date ranges. The generated code is inserted as a runnable cell. Ideal for unit tests, demos, and sharing notebooks without exposing real data.
+
+**Options**
+
+| Flag | Default | Description |
+|---|---|---|
+| `DF_NAME` | required | Template DataFrame variable name |
+| `--n N` | `100` | Number of rows to generate |
+| `--var NAME` | `df_mock` | Variable name for the output DataFrame |
+| `--seed N` | `42` | Random seed for reproducibility |
+
+**Examples**
+
+```python
+%jiuwen_mock df
+```
+
+```python
+%jiuwen_mock df_train --n 500 --var df_synthetic
+```
+
+```python
+%jiuwen_mock transactions --n 1000 --seed 0
+```
+
+```python
+%jiuwen_mock customers --n 200 --var df_test_customers --seed 7
+```
+
+---
+
+### `%jiuwen_compare`
+
+Compare two DataFrames and get a structured drift report. Covers schema changes (added/removed/type-changed columns), statistical drift for numerics, categorical distribution changes, and null rate shifts. Useful for train/test split validation, before/after cleaning checks, and dataset version comparisons.
+
+**Options**
+
+| Flag | Description |
+|---|---|
+| `DF1 DF2` | Two DataFrame variable names (required, positional) |
+| `--target COL` | Focus drift analysis on this label column |
+
+**Examples**
+
+```python
+%jiuwen_compare df_train df_test
+```
+
+```python
+%jiuwen_compare df_v1 df_v2 --target churn
+```
+
+```python
+%jiuwen_compare raw_df cleaned_df
+```
+
+```python
+%jiuwen_compare baseline_df current_df --target revenue
+```
+
+---
+
 ## Workflow
 
 ### `%jiuwen_track`
@@ -991,4 +1160,36 @@ Introspect a trained model and generate a structured model card — covering ove
 
 ```python
 %jiuwen_card lgbm_clf --metrics "accuracy=0.94 recall=0.89" --output cards/churn_model.md
+```
+
+---
+
+### `%jiuwen_suggest`
+
+Analyze all executed cells, the current variable namespace, and detected DataFrames and models, then propose the next most valuable steps — each with a priority label, rationale, and a runnable code stub inserted as a cell.
+
+**Options**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--domain TEXT` | none | Domain context e.g. `"fraud detection"`, `"NLP classification"` |
+| `--goal TEXT` | none | The end goal e.g. `"production deployment"`, `"Kaggle submission"` |
+| `--n N` | `8` | Number of suggestions to produce |
+
+**Examples**
+
+```python
+%jiuwen_suggest
+```
+
+```python
+%jiuwen_suggest --domain "fraud detection"
+```
+
+```python
+%jiuwen_suggest --goal "production deployment" --n 10
+```
+
+```python
+%jiuwen_suggest --domain "time series" --goal "forecast next 30 days"
 ```
