@@ -53,8 +53,8 @@ __version__ = "0.1.0"
 
 def load_ipython_extension(ip):
     """Called by %load_ext jiuwenswarm_jupyter."""
-    from .magic import register_magics
-    register_magics(ip)
+    from .magics import register_all
+    register_all(ip)
 
     from .config import register_config_magic
     register_config_magic(ip)
