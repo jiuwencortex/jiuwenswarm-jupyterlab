@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import io
+import logging
 import os
 import sys
 from typing import TYPE_CHECKING, AsyncIterator, Any
@@ -13,6 +16,26 @@ if TYPE_CHECKING:
     pass
 
 _VALID_MODES = {"agent", "code", "team", "code.team"}
+
+
+@contextlib.contextmanager
+def _suppress_console_logs():
+    """Temporarily silence JiuwenSwarm/agent console logging while a magic runs.
+
+    The server runs in-process inside the kernel, so its INFO logs normally
+    leak into the cell output.  ``logging.disable`` is a module-level override
+    that gates every ``Logger.isEnabledFor`` check — it works even for loggers
+    that are created lazily mid-run (openjiuwen ``DefaultLogger``) and whose
+    handlers bind to ``sys.stdout`` at construction.  WARNING and above still
+    pass through; DEBUG/INFO are dropped.  The previous state is restored
+    afterwards.
+    """
+    previous = getattr(logging, "_level", logging.NOTSET)
+    logging.disable(logging.INFO)
+    try:
+        yield
+    finally:
+        logging.disable(previous)
 
 
 def _ensure_jiuwenswarm() -> None:
@@ -197,32 +220,33 @@ class JupyterSwarm:
 
     def run_sync(self, query: str, **kwargs) -> str:
         """Synchronous wrapper around :meth:`run` for use in cell magics."""
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We are inside an existing event loop (e.g. ipykernel).
-                import nest_asyncio  # type: ignore[import]
-                nest_asyncio.apply()
-                return loop.run_until_complete(self.run(query, **kwargs))
-            else:
-                return loop.run_until_complete(self.run(query, **kwargs))
-        except ImportError:
-            # nest_asyncio not available — create a new loop in a thread
-            result: list[str] = []
+        with _suppress_console_logs():
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We are inside an existing event loop (e.g. ipykernel).
+                    import nest_asyncio  # type: ignore[import]
+                    nest_asyncio.apply()
+                    return loop.run_until_complete(self.run(query, **kwargs))
+                else:
+                    return loop.run_until_complete(self.run(query, **kwargs))
+            except ImportError:
+                # nest_asyncio not available — create a new loop in a thread
+                result: list[str] = []
 
-            def _run() -> None:
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                try:
-                    result.append(new_loop.run_until_complete(self.run(query, **kwargs)))
-                finally:
-                    new_loop.close()
+                def _run() -> None:
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result.append(new_loop.run_until_complete(self.run(query, **kwargs)))
+                    finally:
+                        new_loop.close()
 
-            import threading
-            t = threading.Thread(target=_run, daemon=True)
-            t.start()
-            t.join()
-            return result[0] if result else ""
+                import threading
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                t.join()
+                return result[0] if result else ""
 
     # ── Internal ─────────────────────────────────────────────────────────────
 

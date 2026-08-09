@@ -87,6 +87,13 @@ class StreamRenderer:
         self._tool_calls: list[dict] = []
         self._display_handle = None
         self._start_time = time.monotonic()
+        self._status: str = "thinking"  # thinking | generating | done
+        self._status_label: str = "Thinking…"
+        self._reasoning_buf: list[str] = []
+
+    def _set_status(self, status: str, label: str | None = None) -> None:
+        self._status = status
+        self._status_label = label if label is not None else status.capitalize()
 
     async def render(self, stream: AsyncIterator[Any]) -> str:
         """Consume *stream* and render to the current cell output.
@@ -109,6 +116,7 @@ class StreamRenderer:
 
         # Final render with completion marker.
         elapsed = time.monotonic() - self._start_time
+        self._set_status("done")
         update_display(
             HTML(self._render_html(done=True, elapsed=elapsed)),
             display_id=display_id,
@@ -139,11 +147,28 @@ class StreamRenderer:
             event_type = ""
 
         if event_type in ("chat.delta", "delta"):
+            if self._status != "generating":
+                self._set_status("generating", "Generating…")
             delta = payload.get("delta") or payload.get("content") or payload.get("text") or ""
             if delta:
                 self._text_buf.append(str(delta))
 
-        elif event_type in ("tool.call", "tool_call"):
+        elif event_type in ("chat.reasoning", "reasoning"):
+            if self._status != "thinking":
+                self._set_status("thinking", "Thinking…")
+            delta = payload.get("content") or payload.get("delta") or payload.get("text") or ""
+            if delta:
+                self._reasoning_buf.append(str(delta))
+
+        elif event_type in ("chat.processing_status", "processing_status"):
+            is_complete = payload.get("is_complete", payload.get("processing_complete", False))
+            status = payload.get("status", "")
+            if is_complete and not status:
+                self._set_status("generating", "Finalizing…")
+            elif status:
+                self._set_status("generating", str(status))
+
+        elif event_type in ("chat.tool_call", "tool.call", "tool_call"):
             tc = payload.get("tool_call") or payload
             name = tc.get("name", "tool") if isinstance(tc, dict) else "tool"
             args = tc.get("arguments", {}) if isinstance(tc, dict) else {}
@@ -155,7 +180,7 @@ class StreamRenderer:
                     pass
             self._tool_calls.append({"type": "call", "name": name, "args": args})
 
-        elif event_type in ("tool.result", "tool_result"):
+        elif event_type in ("chat.tool_result", "tool.result", "tool_result"):
             name = payload.get("tool_name", "") or (
                 payload.get("tool_call", {}).get("name", "") if isinstance(payload.get("tool_call"), dict) else ""
             )
@@ -166,9 +191,22 @@ class StreamRenderer:
             text = payload.get("content") or payload.get("text") or ""
             if text:
                 self._text_buf = [str(text)]
+                self._set_status("done")
 
     def _render_html(self, done: bool = False, elapsed: float | None = None) -> str:
         parts: list[str] = []
+
+        # Status line — thinking / generating / done
+        if done:
+            status_html = ("<span style='color: var(--jp-content-font-color3, #aaa)'>"
+                           f"&#10003; done</span>")
+        elif self._status == "generating":
+            status_html = ("<span style='color: #4a9eff'>&#9889; "
+                           f"{html.escape(self._status_label)}</span>")
+        else:
+            status_html = ("<span style='color: #c7a252'>&#9682; "
+                           f"{html.escape(self._status_label)}</span>")
+        parts.append(f"<div style='font-size:12px; margin-bottom:4px'>{status_html}</div>")
 
         # Tool call summary (collapsible blocks)
         if self._tool_calls:
@@ -183,6 +221,17 @@ class StreamRenderer:
                         f"<summary>&#9656; tool: {label}</summary></details>"
                     )
             parts.append("</div>")
+
+        # Reasoning (thinking) content — collapsible
+        reasoning = "".join(self._reasoning_buf).strip()
+        if reasoning and not done:
+            parts.append(
+                f"<details style='margin:2px 0 8px 0; font-size:12px; "
+                f"color: var(--jp-content-font-color2, #888)'>"
+                f"<summary>&#9662; reasoning</summary>"
+                f"<div style='white-space:pre-wrap; margin-top:4px'>{html.escape(reasoning)}</div>"
+                f"</details>"
+            )
 
         # Main response text — rendered as markdown HTML
         text = "".join(self._text_buf)
