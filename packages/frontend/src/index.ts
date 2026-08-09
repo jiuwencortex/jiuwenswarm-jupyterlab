@@ -3,7 +3,6 @@
  *
  * Registers:
  *   - Sidebar chat panel (ChatPanel)
- *   - Sidebar session list panel (SessionListPanel)
  *   - Swarm map panel (SwarmMapPanel)
  *   - Status bar indicator (StatusIndicator)
  *   - Command palette entries
@@ -32,7 +31,6 @@ import { ChatPanel } from './ChatPanel';
 import { SwarmMapPanel } from './SwarmMapPanel';
 import { StatusIndicator } from './StatusIndicator';
 import { NotebookContextCollector } from './NotebookContextCollector';
-import { SessionListPanel } from './SessionListPanel';
 import { jiuwenIcon } from './icon';
 
 const PLUGIN_ID = '@jiuwenswarm/jupyterlab:plugin';
@@ -257,18 +255,13 @@ const extension: JupyterFrontEndPlugin<void> = {
     // ── Chat panel ──────────────────────────────────────────────────────────
     const chatPanel = new ChatPanel(client, sessionMgr);
     chatPanel.title.icon = jiuwenIcon;
+    chatPanel.title.iconClass = 'jp-SideBar-tabIcon';
+    chatPanel.title.label = ''; // icon-only tab; caption below gives the tooltip
+    chatPanel.title.caption = 'JiuwenSwarm';
 
     const chatTracker = new WidgetTracker<ChatPanel>({ namespace: 'jiuwenswarm-chat' });
     app.shell.add(chatPanel, 'left', { rank: 500 });
     await chatTracker.add(chatPanel);
-
-    // ── Session list panel ───────────────────────────────────────────────────
-    const sessionListPanel = new SessionListPanel(sessionMgr);
-    const sessionListTracker = new WidgetTracker<SessionListPanel>({
-      namespace: 'jiuwenswarm-sessions',
-    });
-    app.shell.add(sessionListPanel, 'left', { rank: 501 });
-    await sessionListTracker.add(sessionListPanel);
 
     // ── Swarm map panel ─────────────────────────────────────────────────────
     let swarmMapWidget: MainAreaWidget<SwarmMapPanel> | null = null;
@@ -358,7 +351,8 @@ const extension: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(commands.openSessions, {
       label: 'JiuwenSwarm: Open Session List',
       execute: () => {
-        app.shell.activateById(SessionListPanel.ID);
+        app.shell.activateById(ChatPanel.ID);
+        // Session browsing lives in the chat panel menu; no standalone panel.
       },
     });
 
@@ -367,7 +361,6 @@ const extension: JupyterFrontEndPlugin<void> = {
       palette.addItem({ command: commands.openChat, category });
       palette.addItem({ command: commands.openSwarmMap, category });
       palette.addItem({ command: commands.newSession, category });
-      palette.addItem({ command: commands.openSessions, category });
     }
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -386,7 +379,6 @@ const extension: JupyterFrontEndPlugin<void> = {
     // ── Layout restorer ───────────────────────────────────────────────────────
     if (restorer) {
       restorer.add(chatPanel, 'jiuwenswarm-chat');
-      restorer.add(sessionListPanel, 'jiuwenswarm-sessions');
     }
 
     console.log('[jiuwenswarm] JupyterLab extension activated');
