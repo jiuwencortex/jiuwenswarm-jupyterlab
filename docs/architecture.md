@@ -12,6 +12,65 @@ Both layers call the same in-process `JiuWenSwarm` facade, which lives inside th
 
 ---
 
+## System diagram
+
+```
+                 ┌───────────────────────────────────────────────────────────────────┐
+                 │                    User's Jupyter environment                      │
+                 │                                                                   │
+                 │   %%jiuwen / %jiuwen_*        %jiuwen_chat        sidebar panel   │
+                 │   (any Jupyter env)           (Colab, Kaggle,     (JupyterLab     │
+                 │                                classic Notebook)   4+ only)       │
+                 └──────────┬──────────────────────────┬──────────────────┬──────────┘
+                            │                          │                  │
+                 IPython magic                IPython magic +   Jupyter comm (IComm)
+                            │                JS comm bridge     via TypeScript ext.
+                            │                          │                  │
+                            ▼                          ▼                  │
+┌───────────────────────────────────────────────────────────────────────  │ ──────────┐
+│                     jiuwenswarm_jupyter  (Python package, in kernel)    │            │
+│                                                                         │            │
+│  magic.py ─────── %%jiuwen / %jiuwen / %jiuwen_error / %jiuwen_clear   │            │
+│                   %jiuwen_export / %jiuwen_replay / %jiuwen_pin         │            │
+│                   %jiuwen_unpin / %jiuwen_chat                          │            │
+│                                                                         │            │
+│  client.py ────── JupyterSwarm (wraps JiuWenSwarm, tracks history)      │            │
+│  context.py ───── namespace extraction; pinned variables                │            │
+│  session.py ───── per-notebook session registry                         │            │
+│  display.py ───── streaming IPython output renderer                     │            │
+│  comm_handler.py  'jiuwenswarm' Jupyter comm target ◄────────────────── ┘            │
+│  notebook_tools.py  read_variable / read_notebook_cell /                             │
+│                     insert_notebook_cell / replace_notebook_cell                     │
+│  config.py ────── JiuwenConfig; %jiuwen_config magic                                │
+│  widgets.py ───── ipywidgets panel; %jiuwen_panel magic                              │
+└─────────────────────────────────────┬────────────────────────────────────────────────┘
+                                      │  in-process Python call (no server, no port)
+                                      ▼
+                       ┌──────────────────────────────────┐
+                       │   JiuWenSwarm  (agent runtime)    │
+                       │   same OS process as the kernel   │
+                       │   single / team / code modes      │
+                       └──────────────────────────────────┘
+
+
+         ┌──────────────────────────────────────────────────────────────────────┐
+         │            @jiuwenswarm/jupyterlab  (TypeScript, browser)             │
+         │                                                                      │
+         │  index.ts ─────── plugin init, kernel wiring, widgetRemoved cleanup  │
+         │  WsClient.ts ──── IComm registry (one IComm per open notebook)       │
+         │  SessionManager.ts  session list partitioned by kernel                │
+         │  ChatPanel.ts ──── sidebar chat  (chat.html iframe + postMessage)     │
+         │  SessionListPanel.ts  session browser with filter                     │
+         │  SwarmMapPanel.ts ─ live swarm map (swarm_map.html iframe)            │
+         │  StatusIndicator.ts  status bar — state / cost / active kernel        │
+         └──────────────────────────────┬───────────────────────────────────────┘
+                                        │  Jupyter comm (IComm, one per kernel)
+                                        ▼
+                            comm_handler.py  in the Python kernel
+```
+
+---
+
 ## Project layout
 
 ```
