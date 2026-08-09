@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
 from typing import TYPE_CHECKING, AsyncIterator, Any
 
 from .session import make_session_id
@@ -11,6 +13,46 @@ if TYPE_CHECKING:
     pass
 
 _VALID_MODES = {"agent", "code", "team", "code.team"}
+
+
+def _ensure_jiuwenswarm() -> None:
+    """Make ``jiuwenswarm`` importable from the running kernel.
+
+    The kernel that executes ``%%jiuwen`` may be a different Python than the
+    one the JiuWenSwarm server was launched from. Fall back to the source
+    checkout (via ``JIWENSWARM_SOURCE`` or the default workspace path) when
+    the package is not already installed in the kernel.
+    """
+    try:
+        import jiuwenswarm  # noqa: F401
+        if getattr(jiuwenswarm, "__file__", None):
+            return
+    except ImportError:
+        pass
+
+    sys.modules.pop("jiuwenswarm", None)
+
+    candidates = [
+        os.environ.get("JIWENSWARM_SOURCE"),
+        "C:\\Workspace\\openjiuwen\\jiuwenswarm",
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        package_dir = os.path.join(candidate, "jiuwenswarm")
+        if os.path.isdir(os.path.join(package_dir, "common")) and candidate not in sys.path:
+            sys.path.insert(0, candidate)
+            try:
+                import jiuwenswarm  # noqa: F401
+                if getattr(jiuwenswarm, "__file__", None):
+                    return
+            except ImportError:
+                continue
+    raise ImportError(
+        "jiuwenswarm is not importable from this kernel. "
+        "Point JIWENSWARM_SOURCE at the checkout (parent of the "
+        "'jiuwenswarm' package dir) or install it into the kernel."
+    )
 
 
 class JupyterSwarm:
@@ -187,6 +229,7 @@ class JupyterSwarm:
     def _get_swarm(self):
         if self._swarm is None:
             try:
+                _ensure_jiuwenswarm()
                 from jiuwenswarm.server.runtime.agent_adapter.interface import JiuWenSwarm
                 self._swarm = JiuWenSwarm()
             except ImportError as exc:
@@ -205,6 +248,7 @@ class JupyterSwarm:
         import time as _time
         from uuid import uuid4
 
+        _ensure_jiuwenswarm()
         from jiuwenswarm.common.schema.agent import AgentRequest
         from jiuwenswarm.common.schema.message import ReqMethod
 
