@@ -33,6 +33,7 @@ import { SwarmMapPanel } from './SwarmMapPanel';
 import { StatusIndicator } from './StatusIndicator';
 import { NotebookContextCollector } from './NotebookContextCollector';
 import { SessionListPanel } from './SessionListPanel';
+import { jiuwenIcon } from './icon';
 
 const PLUGIN_ID = '@jiuwenswarm/jupyterlab:plugin';
 
@@ -255,7 +256,7 @@ const extension: JupyterFrontEndPlugin<void> = {
 
     // ── Chat panel ──────────────────────────────────────────────────────────
     const chatPanel = new ChatPanel(client, sessionMgr);
-    chatPanel.title.iconClass = 'jiuwenswarm-icon jp-SideBar-tabBar-icon';
+    chatPanel.title.icon = jiuwenIcon;
 
     const chatTracker = new WidgetTracker<ChatPanel>({ namespace: 'jiuwenswarm-chat' });
     app.shell.add(chatPanel, 'left', { rank: 500 });

@@ -29,6 +29,8 @@ module.exports = {
     '@jupyterlab/apputils',
     '@jupyterlab/notebook',
     '@jupyterlab/coreutils',
+    '@jupyterlab/ui-components',
+    '@jupyterlab/statusbar',
     '@lumino/widgets',
     '@lumino/messaging',
     'react',
