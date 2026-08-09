@@ -127,6 +127,13 @@ export interface SessionInfo {
   title: string;
   created_at: string;
   mode: AgentMode;
+  kernel_id?: string; // optional — absent means active kernel at receive time
+}
+
+/** Frontend-only: tracks a connected kernel with a human-readable label. */
+export interface KernelInfo {
+  id: string;    // kernel.id from JupyterLab
+  label: string; // notebook filename, e.g. "analysis.ipynb"
 }
 
 export interface SkillInfo {

@@ -4,10 +4,13 @@
  * Shows all active JiuwenSwarm sessions, highlights the current one, and
  * allows the user to switch sessions by clicking.  A "+ New" button creates
  * a fresh session.
+ *
+ * Multi-kernel support: when more than one notebook kernel is connected the
+ * list is rendered in groups, each prefixed by a kernel/notebook header.
+ * Single-kernel stays flat (no visual regression).
  */
 
 import { Widget } from '@lumino/widgets';
-import { KernelCommClient } from './WsClient';
 import { SessionManager } from './SessionManager';
 import { SessionInfo } from './protocol';
 
@@ -18,7 +21,7 @@ export class SessionListPanel extends Widget {
   private _sessionMgr: SessionManager;
   private _list: HTMLElement;
 
-  constructor(client: KernelCommClient, sessionMgr: SessionManager) {
+  constructor(sessionMgr: SessionManager) {
     super();
     this.id = SessionListPanel.ID;
     this.title.label = SessionListPanel.TITLE;
@@ -62,16 +65,39 @@ export class SessionListPanel extends Widget {
   }
 
   private _render(): void {
+    this._list.innerHTML = '';
+    const kernels = this._sessionMgr.allKernels();
+
+    if (kernels.length > 1) {
+      // ── Grouped view: one section per kernel ───────────────────────────
+      let totalSessions = 0;
+      for (const kernel of kernels) {
+        const sessions = this._sessionMgr.getKernelSessions(kernel.id);
+        totalSessions += sessions.length;
+        this._list.appendChild(this._makeKernelHeader(kernel.label));
+        if (sessions.length === 0) {
+          this._list.appendChild(this._makeEmptyNote());
+        } else {
+          const activeId = this._sessionMgr.activeSessionId;
+          for (const session of sessions) {
+            this._list.appendChild(
+              this._makeItem(session, session.session_id === activeId)
+            );
+          }
+        }
+      }
+      if (totalSessions === 0) {
+        this._list.appendChild(this._makeEmptyNote());
+      }
+      return;
+    }
+
+    // ── Flat view: single kernel or no kernels yet ─────────────────────
     const sessions = this._sessionMgr.sessions;
     const activeId = this._sessionMgr.activeSessionId;
-    this._list.innerHTML = '';
 
     if (sessions.length === 0) {
-      const empty = document.createElement('div');
-      empty.style.cssText =
-        'font-size:11px; color:var(--jp-ui-font-color2); padding:8px 0;';
-      empty.textContent = 'No sessions yet. Send a message to start one.';
-      this._list.appendChild(empty);
+      this._list.appendChild(this._makeEmptyNote());
       return;
     }
 
@@ -80,6 +106,24 @@ export class SessionListPanel extends Widget {
         this._makeItem(session, session.session_id === activeId)
       );
     }
+  }
+
+  private _makeKernelHeader(label: string): HTMLElement {
+    const el = document.createElement('div');
+    el.style.cssText =
+      'font-size:10px; font-weight:600; color:var(--jp-ui-font-color2);' +
+      ' text-transform:uppercase; letter-spacing:0.05em;' +
+      ' padding:6px 0 2px; margin-top:4px; border-top:1px solid var(--jp-border-color2);';
+    el.textContent = label;
+    return el;
+  }
+
+  private _makeEmptyNote(): HTMLElement {
+    const empty = document.createElement('div');
+    empty.style.cssText =
+      'font-size:11px; color:var(--jp-ui-font-color2); padding:8px 0;';
+    empty.textContent = 'No sessions yet. Send a message to start one.';
+    return empty;
   }
 
   private _makeItem(session: SessionInfo, isActive: boolean): HTMLElement {

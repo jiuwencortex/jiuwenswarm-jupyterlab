@@ -230,6 +230,34 @@ The event schema is identical to the IDE WebSocket events, so `chat.html` and `s
 
 Cancel is handled via `comm.send({ type: "cancel", session_id })` which calls `asyncio.Task.cancel()` on the running stream.
 
+### Multi-kernel support
+
+Each open notebook tab has its own Python kernel (a separate OS process). The frontend keeps one `IComm` per kernel in `KernelCommClient._comms: Map<string, IComm>`.
+
+**Connection lifecycle:**
+
+```
+tracker.currentChanged fires (user switches tab)
+    │
+    ▼
+_wireKernel(panel)                        ← skipped if already connected
+    ├─ kernel.registerCommTarget(...)       always idempotent
+    ├─ client.connectKernel(id, kernel)    guarded by _comms.has(id)
+    ├─ sessionMgr.registerKernel({id, label})
+    ├─ client.setActiveKernel(id)
+    └─ sessionMgr.refresh()               requests session list from this kernel
+
+panel.sessionContext.kernelChanged fires (kernel restart)
+    └─ _wireKernel(panel)                  re-wires with new kernel object
+       (_wiredPanelIds set prevents stacking listeners per panel)
+```
+
+**Active kernel routing:** `client.send()` always routes to `_comms.get(_activeKernelId)`. Switching tabs sets `_activeKernelId` on both the client and `SessionManager`, so chat messages go to the focused notebook's kernel without user action.
+
+**Session partitioning:** `SessionManager._sessionsByKernel: Map<string, SessionInfo[]>` stores sessions per kernel. The `sessions` getter returns only the active kernel's sessions (used by `ChatPanel`). `SessionListPanel` uses `allKernels()` and `getKernelSessions()` to render grouped sections when more than one kernel is connected; single-kernel stays flat.
+
+**Python side:** No changes required. Each kernel is a separate process with its own `comm_handler.py` and `_active_tasks` dict, so isolation is free.
+
 ### Distribution
 
 The extension is distributed as a Python package that bundles the built TypeScript frontend. The `pyproject.toml` `[tool.hatch.build.targets.wheel.shared-data]` section copies `packages/frontend/dist/` to `share/jupyter/labextensions/@jiuwenswarm/jupyterlab/`. JupyterLab discovers the extension automatically from that path.

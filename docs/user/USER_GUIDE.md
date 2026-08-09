@@ -266,6 +266,16 @@ The left sidebar contains three JiuwenSwarm panels (accessible via the sidebar i
 | **Chat** (rank 1) | Main conversation panel — same as `%%jiuwen` but interactive |
 | **Sessions** (rank 2) | Browse and switch between named sessions; click "+ New" to start one |
 
+### Multi-kernel support
+
+You can have several notebooks open at the same time, each with its own kernel. The sidebar handles this automatically:
+
+- When you **switch to a different notebook tab**, the chat panel connects to that tab's kernel. All messages you send go to the focused notebook's agent.
+- The **Sessions panel** shows sessions grouped by notebook when more than one kernel is connected. Each group is headed by the notebook filename.
+- If a **kernel restarts**, the sidebar re-connects without any manual action. Prior sessions from that kernel remain in the list until the new kernel reports its own session list.
+
+No configuration is needed — just open multiple notebooks normally.
+
 ### Keyboard shortcuts
 
 | Shortcut | Action |

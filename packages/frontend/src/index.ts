@@ -187,36 +187,69 @@ const extension: JupyterFrontEndPlugin<void> = {
     const swarmMgr = new SwarmStateManager(client);
     const contextCollector = new NotebookContextCollector(tracker);
 
-    // Connect comm when the first notebook kernel becomes available
+    // Track which panels already have a kernelChanged listener to avoid stacking.
+    const _wiredPanelIds = new Set<string>();
+
+    /** Connect to a kernel and register it with the session manager. Idempotent. */
+    async function _wireKernel(panel: any): Promise<void> {
+      const kernel = panel.sessionContext?.session?.kernel;
+      if (!kernel) return;
+
+      const kernelId: string = kernel.id;
+      const label: string =
+        panel.title?.label || panel.sessionContext?.name || kernelId;
+
+      // Register comm targets on this kernel (safe to call multiple times).
+      kernel.registerCommTarget('jiuwenswarm_cell_insert', (comm: any) => {
+        comm.onMsg = async (message: any) => {
+          const data = message.content.data as Record<string, any>;
+          await _handleCellInsert(data, tracker);
+        };
+      });
+      kernel.registerCommTarget('jiuwenswarm_cell_replace', (comm: any) => {
+        comm.onMsg = async (message: any) => {
+          const data = message.content.data as Record<string, any>;
+          await _handleCellReplace(data, tracker);
+        };
+      });
+
+      // Open comm (idempotent: connectKernel guards with _comms.has(id)).
+      try {
+        await client.connectKernel(kernelId, kernel);
+        sessionMgr.registerKernel({ id: kernelId, label });
+        console.log('[jiuwenswarm] comm connected to kernel', kernelId, label);
+      } catch (err) {
+        console.warn('[jiuwenswarm] failed to connect comm', err);
+        return;
+      }
+
+      // Switch active kernel and refresh session list from this kernel.
+      client.setActiveKernel(kernelId);
+      sessionMgr.setActiveKernel(kernelId);
+      sessionMgr.refresh();
+    }
+
+    // currentChanged: fires when the user switches notebook tabs.
     tracker.currentChanged.connect(async (_, panel) => {
-      if (panel?.sessionContext?.session?.kernel) {
-        const kernel = panel.sessionContext.session.kernel;
+      if (!panel) return;
 
-        // Register the cell-insert comm target on every kernel
-        kernel.registerCommTarget('jiuwenswarm_cell_insert', (comm, msg) => {
-          comm.onMsg = async (message) => {
-            const data = message.content.data as Record<string, any>;
-            await _handleCellInsert(data, tracker);
-          };
-        });
-
-        // Register the cell-replace comm target (diff dialog → apply)
-        kernel.registerCommTarget('jiuwenswarm_cell_replace', (comm, msg) => {
-          comm.onMsg = async (message) => {
-            const data = message.content.data as Record<string, any>;
-            await _handleCellReplace(data, tracker);
-          };
-        });
-
-        if (!client.isConnected) {
-          try {
-            await client.connect(kernel);
-            sessionMgr.refresh();
-            console.log('[jiuwenswarm] comm connected to kernel');
-          } catch (err) {
-            console.warn('[jiuwenswarm] failed to connect comm', err);
-          }
+      const kernel = panel.sessionContext?.session?.kernel;
+      if (kernel) {
+        if (client.isKernelConnected(kernel.id)) {
+          // Already connected — just switch the active routing target.
+          client.setActiveKernel(kernel.id);
+          sessionMgr.setActiveKernel(kernel.id);
+        } else {
+          await _wireKernel(panel);
         }
+      }
+
+      // Attach a kernelChanged listener once per panel to handle restarts.
+      if (!_wiredPanelIds.has(panel.id)) {
+        _wiredPanelIds.add(panel.id);
+        panel.sessionContext.kernelChanged.connect(async () => {
+          await _wireKernel(panel);
+        });
       }
     });
 

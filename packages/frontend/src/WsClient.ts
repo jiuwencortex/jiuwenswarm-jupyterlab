@@ -9,6 +9,10 @@
  * This module wraps the Jupyter comm API behind the same event-emitter
  * interface that ChatPanel and SwarmMapPanel already expect, so those panels
  * require minimal changes.
+ *
+ * Multi-kernel support: one comm per kernel, keyed by kernel.id.  The active
+ * kernel is the one that send() routes to.  Legacy connect()/disconnect()/
+ * isConnected are preserved as thin wrappers so existing call-sites compile.
  */
 
 import type { IComm } from '@jupyterlab/services/lib/kernel/comm';
@@ -17,52 +21,86 @@ import { KernelEvent, KernelBoundMessage } from './protocol';
 type EventHandler = (event: KernelEvent) => void;
 
 export class KernelCommClient {
-  private _comm: IComm | null = null;
+  private _comms: Map<string, IComm> = new Map();
+  private _activeKernelId: string | null = null;
   private _handlers: EventHandler[] = [];
-  private _connected = false;
 
   constructor(private readonly _commTarget: string = 'jiuwenswarm') {}
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // ── Multi-kernel lifecycle ─────────────────────────────────────────────────
+
+  async connectKernel(id: string, kernel: any): Promise<void> {
+    if (this._comms.has(id)) return; // idempotent
+
+    const comm: IComm = kernel.createComm(this._commTarget);
+    comm.onMsg = (msg: any) => {
+      const data = msg.content?.data as KernelEvent | undefined;
+      if (data) this._dispatch(data);
+    };
+    comm.onClose = () => {
+      this._comms.delete(id);
+      if (this._activeKernelId === id) this._activeKernelId = null;
+    };
+
+    await comm.open({});
+    this._comms.set(id, comm);
+  }
+
+  disconnectKernel(id: string): void {
+    const comm = this._comms.get(id);
+    if (comm) {
+      void comm.close();
+      this._comms.delete(id);
+    }
+    if (this._activeKernelId === id) this._activeKernelId = null;
+  }
+
+  setActiveKernel(id: string): void {
+    if (!this._comms.has(id)) {
+      console.warn('[jiuwenswarm] setActiveKernel: kernel not connected', id);
+      return;
+    }
+    this._activeKernelId = id;
+  }
+
+  isKernelConnected(id: string): boolean {
+    return this._comms.has(id);
+  }
+
+  get activeKernelId(): string | null {
+    return this._activeKernelId;
+  }
+
+  get connectedKernelIds(): string[] {
+    return Array.from(this._comms.keys());
+  }
+
+  // ── Legacy wrappers (single-kernel callers) ────────────────────────────────
 
   async connect(kernel: any): Promise<void> {
-    if (this._connected) return;
-
-    this._comm = kernel.createComm(this._commTarget);
-    this._comm.onMsg = (msg: any) => {
-      const data = msg.content?.data as KernelEvent | undefined;
-      if (data) {
-        this._dispatch(data);
-      }
-    };
-    this._comm.onClose = () => {
-      this._connected = false;
-    };
-
-    await this._comm.open({});
-    this._connected = true;
+    await this.connectKernel(kernel.id, kernel);
+    this.setActiveKernel(kernel.id);
   }
 
   disconnect(): void {
-    if (this._comm) {
-      void this._comm.close();
-      this._comm = null;
+    if (this._activeKernelId !== null) {
+      this.disconnectKernel(this._activeKernelId);
     }
-    this._connected = false;
   }
 
   get isConnected(): boolean {
-    return this._connected;
+    return this._activeKernelId !== null && this._comms.has(this._activeKernelId);
   }
 
   // ── Messaging ─────────────────────────────────────────────────────────────
 
   send(message: KernelBoundMessage): void {
-    if (!this._comm || !this._connected) {
-      console.warn('[jiuwenswarm] comm not connected, dropping message', message);
+    const comm = this._activeKernelId ? this._comms.get(this._activeKernelId) : undefined;
+    if (!comm) {
+      console.warn('[jiuwenswarm] no active kernel comm, dropping message', message);
       return;
     }
-    void this._comm.send(message as Record<string, unknown>);
+    void comm.send(message as Record<string, unknown>);
   }
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
