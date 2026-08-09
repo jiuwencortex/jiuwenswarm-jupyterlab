@@ -31,6 +31,24 @@ Magics registered on load:
     %jiuwen_chat          — embed the full chat UI (chat.html) in the cell output
 """
 
+import warnings
+
+# Suppress harmless third-party deprecation warnings that otherwise pollute
+# cell output whenever the in-process agent loads:
+#  - fastmcp 2.x still imports the deprecated ``authlib.jose`` module.
+#  - agent-core's legacy ``DefaultResponse`` config class triggers a pydantic
+#    deprecation warning on every validation.
+warnings.filterwarnings(
+    "ignore",
+    message="authlib.jose module is deprecated.*",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message="DefaultResponse is deprecated.*",
+    category=DeprecationWarning,
+)
+
 from .client import JupyterSwarm
 from .config import JiuwenConfig, get_config
 from .session import get_default_swarm

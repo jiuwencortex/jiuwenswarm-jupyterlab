@@ -90,6 +90,7 @@ class StreamRenderer:
         self._status: str = "thinking"  # thinking | generating | done
         self._status_label: str = "Thinking…"
         self._reasoning_buf: list[str] = []
+        self._error: str | None = None
 
     def _set_status(self, status: str, label: str | None = None) -> None:
         self._status = status
@@ -193,11 +194,20 @@ class StreamRenderer:
                 self._text_buf = [str(text)]
                 self._set_status("done")
 
+        elif event_type in ("chat.error", "error"):
+            error = (payload.get("error") or payload.get("message")
+                     or payload.get("content") or payload.get("text") or "")
+            if error:
+                self._error = str(error)
+                self._set_status("done")
+
     def _render_html(self, done: bool = False, elapsed: float | None = None) -> str:
         parts: list[str] = []
 
         # Status line — thinking / generating / done
-        if done:
+        if self._error:
+            status_html = "<span style='color: #f14c4c'>&#9888; error</span>"
+        elif done:
             status_html = ("<span style='color: var(--jp-content-font-color3, #aaa)'>"
                            f"&#10003; done</span>")
         elif self._status == "generating":
@@ -207,6 +217,15 @@ class StreamRenderer:
             status_html = ("<span style='color: #c7a252'>&#9682; "
                            f"{html.escape(self._status_label)}</span>")
         parts.append(f"<div style='font-size:12px; margin-bottom:4px'>{status_html}</div>")
+
+        # Error block — shown prominently in red
+        if self._error:
+            parts.append(
+                f"<div style='color: #f14c4c; border:1px solid #f14c4c66; "
+                f"background:#f14c4c11; border-radius:4px; padding:6px 8px; "
+                f"margin:4px 0; font-size:13px; white-space:pre-wrap'>"
+                f"&#9888; {html.escape(self._error)}</div>"
+            )
 
         # Tool call summary (collapsible blocks)
         if self._tool_calls:
@@ -243,7 +262,7 @@ class StreamRenderer:
             )
 
         # Footer
-        if done and elapsed is not None:
+        if done and elapsed is not None and not self._error:
             parts.append(
                 f"<div style='font-size:11px; color: var(--jp-content-font-color3, #aaa); "
                 f"margin-top:6px'>"

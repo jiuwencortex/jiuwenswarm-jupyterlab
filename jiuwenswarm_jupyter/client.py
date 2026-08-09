@@ -22,20 +22,44 @@ _VALID_MODES = {"agent", "code", "team", "code.team"}
 def _suppress_console_logs():
     """Temporarily silence JiuwenSwarm/agent console logging while a magic runs.
 
-    The server runs in-process inside the kernel, so its INFO logs normally
-    leak into the cell output.  ``logging.disable`` is a module-level override
-    that gates every ``Logger.isEnabledFor`` check — it works even for loggers
-    that are created lazily mid-run (openjiuwen ``DefaultLogger``) and whose
-    handlers bind to ``sys.stdout`` at construction.  WARNING and above still
-    pass through; DEBUG/INFO are dropped.  The previous state is restored
-    afterwards.
+    The server runs in-process inside the kernel, so its logs normally leak
+    into the cell output.  ``logging.disable`` is a module-level override that
+    gates every ``Logger.isEnabledFor`` check — it works even for loggers that
+    are created lazily mid-run (openjiuwen ``DefaultLogger``) and whose handlers
+    bind to ``sys.stdout`` at construction.  We gate everything below CRITICAL;
+    agent-side failures surface instead as ``chat.error`` chunks rendered in red
+    by the display layer, and real Python exceptions in the cell still appear
+    via IPython.  The previous state is restored afterwards.
     """
+    _install_warning_filters()
     previous = getattr(logging, "_level", logging.NOTSET)
-    logging.disable(logging.INFO)
+    logging.disable(logging.CRITICAL)
     try:
         yield
     finally:
         logging.disable(previous)
+
+
+def _install_warning_filters() -> None:
+    """Ignore known third-party deprecation warnings.
+
+    authlib registers ``simplefilter("always", AuthlibDeprecationWarning)`` at
+    import time, which is prepended *after* any filters we install earlier — so
+    we must re-assert ours after authlib has been imported, otherwise it wins.
+    This runs on every magic call (after the agent has loaded its deps).
+    """
+    import warnings as _warnings
+
+    _warnings.filterwarnings(
+        "ignore",
+        message="authlib.jose module is deprecated.*",
+        category=DeprecationWarning,
+    )
+    _warnings.filterwarnings(
+        "ignore",
+        message="DefaultResponse is deprecated.*",
+        category=DeprecationWarning,
+    )
 
 
 def _ensure_jiuwenswarm() -> None:
