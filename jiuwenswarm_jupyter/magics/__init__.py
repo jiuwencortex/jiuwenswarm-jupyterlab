@@ -15,21 +15,23 @@ magics/
 │   ├── unpin.py   %jiuwen_unpin
 │   └── memory.py  %jiuwen_memory
 │
-├── analysis/      — code intelligence, safety, profiling, generation
-│   ├── explain.py    %%jiuwen_explain
-│   ├── test_gen.py   %%jiuwen_test
-│   ├── audit.py      %jiuwen_audit
-│   ├── story.py      %jiuwen_story
-│   ├── profile.py    %%jiuwen_profile
-│   ├── guard.py      %%jiuwen_guard
-│   ├── safe.py       %%jiuwen_safe
-│   ├── todo.py       %jiuwen_todo
-│   ├── diff.py       %jiuwen_diff
-│   ├── doc.py        %%jiuwen_doc
-│   ├── benchmark.py  %%jiuwen_benchmark
+├── analysis/      — understand code: explain, audit, safety, profiling, narrative
+│   ├── explain.py  %%jiuwen_explain
+│   ├── audit.py    %jiuwen_audit
+│   ├── story.py    %jiuwen_story
+│   ├── profile.py  %%jiuwen_profile
+│   ├── guard.py    %%jiuwen_guard
+│   ├── safe.py     %%jiuwen_safe
+│   ├── diff.py     %jiuwen_diff
+│   └── doc.py      %%jiuwen_doc
+│
+├── transform/     — rewrite code: fix, optimize, translate, generate tests
 │   ├── fix.py        %jiuwen_fix
 │   ├── optimize.py   %%jiuwen_optimize
-│   └── translate.py  %%jiuwen_translate
+│   ├── translate.py  %%jiuwen_translate
+│   ├── test_gen.py   %%jiuwen_test
+│   ├── todo.py       %jiuwen_todo
+│   └── benchmark.py  %%jiuwen_benchmark
 │
 ├── data/          — data science: EDA, schema, features, SQL, viz, mock, compare
 │   ├── eda.py        %jiuwen_eda
@@ -56,9 +58,19 @@ Each sub-package exposes a ``register_all(ip)`` function.
 
 from __future__ import annotations
 
-from . import analysis, chat, data, error, jiuwen, session, workflow
+from . import analysis, chat, data, error, jiuwen, session, transform, workflow
 
-__all__ = ["register_all", "jiuwen", "error", "chat", "session", "analysis", "data", "workflow"]
+__all__ = [
+    "register_all",
+    "jiuwen",
+    "error",
+    "chat",
+    "session",
+    "analysis",
+    "transform",
+    "data",
+    "workflow",
+]
 
 
 def register_all(ip) -> None:
@@ -71,8 +83,11 @@ def register_all(ip) -> None:
     # Session — conversation lifecycle and context
     session.register_all(ip)
 
-    # Analysis — code intelligence and safety
+    # Analysis — understand and narrate code
     analysis.register_all(ip)
+
+    # Transform — rewrite and generate code
+    transform.register_all(ip)
 
     # Data — EDA, features, SQL, viz
     data.register_all(ip)

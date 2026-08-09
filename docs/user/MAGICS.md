@@ -33,22 +33,31 @@ Load the extension first:
 
 ### Analysis
 
+*Understand code: explain, audit, safety, profiling, narrative.*
+
 | Magic | Kind | What it does |
 |---|---|---|
 | [`%%jiuwen_explain`](#jiuwen_explain) | cell | Execute a cell and get an agent-written explanation |
-| [`%%jiuwen_test`](#jiuwen_test) | cell | Generate a full pytest test suite for any function or class |
 | [`%jiuwen_audit`](#jiuwen_audit) | line | Full notebook health scan — code quality and data science issues |
 | [`%jiuwen_story`](#jiuwen_story) | line | Convert executed cells into a narrated blog post, report, or paper |
 | [`%%jiuwen_profile`](#jiuwen_profile) | cell | Profile a cell with cProfile and get agent-interpreted analysis |
 | [`%%jiuwen_guard`](#jiuwen_guard) | cell | Declare pre/post conditions; agent diagnoses violations automatically |
 | [`%%jiuwen_safe`](#jiuwen_safe) | cell | Static side-effect analysis before running a risky cell |
-| [`%jiuwen_todo`](#jiuwen_todo) | line | Find TODO/FIXME/stubs and draft implementations |
 | [`%jiuwen_diff`](#jiuwen_diff) | line | Diff against a git ref and get agent commentary |
 | [`%%jiuwen_doc`](#jiuwen_doc) | cell | Generate and insert a complete docstring for any function or class |
-| [`%%jiuwen_benchmark`](#jiuwen_benchmark) | cell | Benchmark multiple implementations and explain the results |
+
+### Transform
+
+*Rewrite code: fix errors, optimize, translate, generate tests.*
+
+| Magic | Kind | What it does |
+|---|---|---|
 | [`%jiuwen_fix`](#jiuwen_fix) | line | Fix the last error by rewriting the failing cell in-place |
 | [`%%jiuwen_optimize`](#jiuwen_optimize) | cell | Rewrite a slow cell with vectorized code, replacing it in-place |
 | [`%%jiuwen_translate`](#jiuwen_translate) | cell | Translate code to a different data library (polars, dask, spark, …) |
+| [`%%jiuwen_test`](#jiuwen_test) | cell | Generate a full pytest test suite for any function or class |
+| [`%jiuwen_todo`](#jiuwen_todo) | line | Find TODO/FIXME/stubs and draft implementations |
+| [`%%jiuwen_benchmark`](#jiuwen_benchmark) | cell | Benchmark multiple implementations and explain the results |
 
 ### Data
 
@@ -274,6 +283,8 @@ Persistent cross-notebook knowledge base stored in `~/.jiuwenswarm/memory.json`.
 
 ## Analysis
 
+*Understand code: explain, audit, safety, profiling, and narrative output.*
+
 ### `%%jiuwen_explain`
 
 Execute the cell body in the notebook namespace, then stream an agent-written explanation of what the code did and what the output means. Produces prose suitable for inserting as a markdown narrative cell.
@@ -303,43 +314,6 @@ from sklearn.decomposition import PCA
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_scaled)
 print(pca.explained_variance_ratio_)
-```
-
----
-
-### `%%jiuwen_test`
-
-Read the cell body as source and ask the agent to write a complete pytest test suite — normal cases, edge cases, and expected failures. The cell is not executed.
-
-**Options**
-
-| Flag | Description |
-|---|---|
-| `--file PATH` | Write tests to this file instead of inserting a new cell |
-
-**Examples**
-
-```
-%%jiuwen_test
-def normalize(df, cols):
-    return (df[cols] - df[cols].mean()) / df[cols].std()
-```
-
-```
-%%jiuwen_test
-def split_dataset(df, target, test_size=0.2, seed=42):
-    from sklearn.model_selection import train_test_split
-    X = df.drop(columns=[target])
-    y = df[target]
-    return train_test_split(X, y, test_size=test_size, stratify=y, random_state=seed)
-```
-
-```
-%%jiuwen_test --file tests/test_features.py
-class FeatureEncoder:
-    def fit(self, df): ...
-    def transform(self, df): ...
-    def fit_transform(self, df): ...
 ```
 
 ---
@@ -511,28 +485,6 @@ df.to_parquet("processed/features_v3.parquet", index=False)
 
 ---
 
-### `%jiuwen_todo`
-
-Scan every executed cell for `# TODO`, `# FIXME`, `# HACK`, `# XXX`, `raise NotImplementedError`, and bare `pass` statements. Sends the full list to the agent, which drafts a concrete implementation for each item and inserts them as runnable code cells.
-
-**Options**
-
-| Flag | Description |
-|---|---|
-| `--list` | Print found items only — do not call the agent |
-
-**Examples**
-
-```python
-%jiuwen_todo
-```
-
-```python
-%jiuwen_todo --list
-```
-
----
-
 ### `%jiuwen_diff`
 
 Run `git diff` against a reference and send the output to the agent for a structured review. The raw diff is printed first; the agent's commentary follows.
@@ -607,46 +559,9 @@ def rolling_zscore(series, window=30):
 
 ---
 
-### `%%jiuwen_benchmark`
+## Transform
 
-Split the cell on `---` separator lines, benchmark each section with `timeit`, print a comparison table with ratios to the fastest implementation, and send the results to the agent for explanation.
-
-**Options**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--n N` | `1000` | Number of repetitions per timing round |
-| `--setup CODE` | `pass` | Setup code executed once before timing (e.g., imports) |
-
-**Examples**
-
-```
-%%jiuwen_benchmark --n 500
-result = [x**2 for x in range(10000)]
----
-import numpy as np
-result = np.arange(10000) ** 2
-```
-
-```
-%%jiuwen_benchmark --setup "import pandas as pd; df = pd.read_parquet('data.parquet')"
-merged = df.merge(lookup, on="id")
----
-merged = df.join(lookup.set_index("id"), on="id")
-```
-
-```
-%%jiuwen_benchmark --n 100
-# Approach A: iterrows
-totals = []
-for _, row in df.iterrows():
-    totals.append(row["price"] * row["qty"])
----
-# Approach B: vectorized
-totals = (df["price"] * df["qty"]).tolist()
-```
-
----
+*Rewrite code: fix errors, optimize performance, translate between libraries, generate tests.*
 
 ### `%jiuwen_fix`
 
@@ -743,6 +658,106 @@ result = df.merge(other, on="customer_id").groupby("segment")["amount"].mean()
 ```
 %%jiuwen_translate --to spark
 pivoted = df.pivot_table(index="month", columns="product", values="revenue", aggfunc="sum")
+```
+
+---
+
+### `%%jiuwen_test`
+
+Read the cell body as source and ask the agent to write a complete pytest test suite — normal cases, edge cases, and expected failures. The cell is not executed.
+
+**Options**
+
+| Flag | Description |
+|---|---|
+| `--file PATH` | Write tests to this file instead of inserting a new cell |
+
+**Examples**
+
+```
+%%jiuwen_test
+def normalize(df, cols):
+    return (df[cols] - df[cols].mean()) / df[cols].std()
+```
+
+```
+%%jiuwen_test
+def split_dataset(df, target, test_size=0.2, seed=42):
+    from sklearn.model_selection import train_test_split
+    X = df.drop(columns=[target])
+    y = df[target]
+    return train_test_split(X, y, test_size=test_size, stratify=y, random_state=seed)
+```
+
+```
+%%jiuwen_test --file tests/test_features.py
+class FeatureEncoder:
+    def fit(self, df): ...
+    def transform(self, df): ...
+    def fit_transform(self, df): ...
+```
+
+---
+
+### `%jiuwen_todo`
+
+Scan every executed cell for `# TODO`, `# FIXME`, `# HACK`, `# XXX`, `raise NotImplementedError`, and bare `pass` statements. Sends the full list to the agent, which drafts a concrete implementation for each item and inserts them as runnable code cells.
+
+**Options**
+
+| Flag | Description |
+|---|---|
+| `--list` | Print found items only — do not call the agent |
+
+**Examples**
+
+```python
+%jiuwen_todo
+```
+
+```python
+%jiuwen_todo --list
+```
+
+---
+
+### `%%jiuwen_benchmark`
+
+Split the cell on `---` separator lines, benchmark each section with `timeit`, print a comparison table with ratios to the fastest implementation, and send the results to the agent for explanation.
+
+**Options**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--n N` | `1000` | Number of repetitions per timing round |
+| `--setup CODE` | `pass` | Setup code executed once before timing (e.g., imports) |
+
+**Examples**
+
+```
+%%jiuwen_benchmark --n 500
+result = [x**2 for x in range(10000)]
+---
+import numpy as np
+result = np.arange(10000) ** 2
+```
+
+```
+%%jiuwen_benchmark --setup "import pandas as pd; df = pd.read_parquet('data.parquet')"
+merged = df.merge(lookup, on="id")
+---
+merged = df.join(lookup.set_index("id"), on="id")
+```
+
+```
+%%jiuwen_benchmark --n 100
+# Approach A: iterrows
+totals = []
+for _, row in df.iterrows():
+    totals.append(row["price"] * row["qty"])
+---
+# Approach B: vectorized
+totals = (df["price"] * df["qty"]).tolist()
 ```
 
 ---
