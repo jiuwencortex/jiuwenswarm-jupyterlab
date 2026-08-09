@@ -15,7 +15,7 @@ def register(ip) -> None:
             %jiuwen_unpin df_train results  # unpin several
             %jiuwen_unpin all               # clear all pinned variables
         """
-        from ..config import get_config
+        from ...config import get_config
 
         cfg = get_config(ip)
         arg = line.strip()

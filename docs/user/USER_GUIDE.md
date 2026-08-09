@@ -168,6 +168,193 @@ The agent receives the full traceback and the failing cell source — you do not
 
 ---
 
+## `%%jiuwen_explain` — run a cell and get an instant explanation
+
+Executes the cell body normally, then streams an explanation of what the code did and what the output means. The explanation is written in a style suitable for inserting as a narrative markdown cell.
+
+```
+%%jiuwen_explain
+model.fit(X_train, y_train)
+print(model.score(X_test, y_test))
+```
+
+```
+%%jiuwen_explain
+df = df.groupby("category").agg({"revenue": "sum", "units": "mean"}).reset_index()
+df.head()
+```
+
+The cell executes first in the notebook namespace. The agent then receives the source code and any output, and writes a clear explanation of what happened at each step.
+
+---
+
+## `%%jiuwen_test` — generate pytest tests for the cell
+
+Reads the cell body as source code and asks the agent to generate a complete set of pytest tests. The cell is not executed — only read as source. The agent inserts the tests as a new code cell.
+
+```
+%%jiuwen_test
+def normalize(df, cols):
+    return (df[cols] - df[cols].mean()) / df[cols].std()
+```
+
+```
+%%jiuwen_test --file tests/test_preprocessing.py
+class FeatureEncoder:
+    def fit(self, df): ...
+    def transform(self, df): ...
+```
+
+`--file PATH` writes the tests to the specified file (appending if it already exists) instead of inserting a cell.
+
+---
+
+## `%jiuwen_audit` — full notebook health scan
+
+Collects all executed cells and the current variable namespace, then sends them to the agent for a structured code quality review.
+
+The agent checks for:
+- Dead or unreachable code
+- Unused imports
+- Data leakage between train and test sets
+- Operations that may silently fail on unseen data
+- Hardcoded paths and magic numbers
+- Out-of-order execution dependencies
+- Memory-heavy patterns (`iterrows`, unnecessary copies)
+- Missing error handling at I/O boundaries
+
+```
+%jiuwen_audit
+%jiuwen_audit --quick    # bullet-point summary only, no code quotes
+```
+
+---
+
+## `%jiuwen_story` — convert the notebook to a narrated document
+
+Reads all executed cells in order and asks the agent to produce a flowing document — blog post, technical report, academic paper, or tutorial — with prose narrative connecting the code sections. The result is written to a markdown file and streamed to the output.
+
+```
+%jiuwen_story
+%jiuwen_story --output analysis.md --style report
+%jiuwen_story --style tutorial
+%jiuwen_story --output draft.md --style paper
+```
+
+| Style | Output |
+|---|---|
+| `blog` (default) | Conversational, first-person technical narrative |
+| `paper` | Abstract, intro, methodology, results, conclusion |
+| `tutorial` | Step-by-step guide, explains before each code block |
+| `report` | Executive summary, findings, recommendations |
+
+---
+
+## `%%jiuwen_profile` — profile a cell and interpret the results
+
+Runs the cell body under `cProfile`, prints the raw stats, then sends the top slowest call sites to the agent for diagnosis and optimisation suggestions.
+
+```
+%%jiuwen_profile
+for row in df.iterrows():
+    process(row)
+```
+
+```
+%%jiuwen_profile --top 30
+result = [expensive_fn(x) for x in large_list]
+```
+
+`--top N` controls how many slowest functions to include in the agent's context (default: 20).
+
+---
+
+## `%%jiuwen_guard` — design-by-contract for notebook cells
+
+Declare pre- and post-conditions as Python expressions. The magic evaluates them before and after execution and calls the agent automatically if any condition fails or raises an exception.
+
+```
+%%jiuwen_guard pre="df.notna().all().all()" post="result.shape[0] == df.shape[0]"
+result = df.merge(lookup, on="id")
+```
+
+```
+%%jiuwen_guard post="model is not None"
+model = train(X_train, y_train)
+```
+
+```
+%%jiuwen_guard pre="len(df) > 1000" post="accuracy > 0.8"
+accuracy = evaluate(model, X_test, y_test)
+```
+
+When a condition passes, a one-line confirmation is printed. When a condition fails, the agent receives the failing expression, the cell source, and the current notebook context, and diagnoses what went wrong.
+
+---
+
+## `%jiuwen_memory` — persistent cross-notebook knowledge base
+
+Save notes to a personal knowledge base stored in `~/.jiuwenswarm/memory.json`. Notes survive kernel restarts and notebook closures. The `search` command retrieves matching notes and sends them to the agent as context.
+
+```
+%jiuwen_memory save "Validation AUC plateaus after 200 XGBoost trees"
+%jiuwen_memory save "The merge on customer_id drops ~3% of rows — known data quality issue"
+%jiuwen_memory search "XGBoost performance"
+%jiuwen_memory list
+%jiuwen_memory delete 3
+%jiuwen_memory clear
+```
+
+Search uses keyword matching. When results are found, they are sent to the agent together with the current notebook context so it can reason over past findings in relation to your current work.
+
+---
+
+## `%jiuwen_diff` — review git changes with agent commentary
+
+Runs `git diff` against a commit reference and sends the diff to the agent for a structured review of what changed and whether anything looks risky or unintentional.
+
+```
+%jiuwen_diff                   # current working tree vs HEAD
+%jiuwen_diff HEAD~3            # last 3 commits
+%jiuwen_diff main              # current branch vs main
+%jiuwen_diff HEAD~1 --stat     # summary only (no full patch)
+%jiuwen_diff HEAD~2 --file src/model.py
+```
+
+The raw diff is printed first; the agent's commentary follows.
+
+---
+
+## `%%jiuwen_safe` — analyse before you run
+
+Sends the cell body to the agent for a static side-effect analysis **without executing it**. The agent reports on files written, network calls, data mutations, non-reversible operations, and exception paths, then delivers a verdict: `SAFE / CAUTION / HIGH RISK`.
+
+```
+%%jiuwen_safe
+os.remove("data/raw/sensitive.csv")
+shutil.rmtree("output/")
+```
+
+```
+%%jiuwen_safe --run
+df.to_sql("results", engine, if_exists="replace")
+```
+
+Without `--run`, the cell is not executed — copy the code into a new cell when ready. With `--run`, the cell executes immediately after the analysis is complete.
+
+---
+
+## `%jiuwen_todo` — draft implementations for unfinished items
+
+Scans every executed cell for `# TODO`, `# FIXME`, `# HACK`, `# XXX`, `raise NotImplementedError`, and bare `pass` statements, then sends them to the agent to draft concrete implementations. Each implementation is inserted as a runnable code cell.
+
+```
+%jiuwen_todo
+%jiuwen_todo --list   # print found items only, do not call the agent
+```
+
+---
+
 ## `%jiuwen_panel` — interactive control panel
 
 Opens an ipywidgets GUI inside the notebook cell output — dropdowns, sliders, and a text area that replace the `%%jiuwen` flag syntax:

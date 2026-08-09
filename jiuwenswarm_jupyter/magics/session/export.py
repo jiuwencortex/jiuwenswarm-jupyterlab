@@ -35,7 +35,7 @@ def register(ip) -> None:
                 filename = tokens[i]
                 i += 1
 
-        from ..session import get_default_swarm, get_named_swarm
+        from ...session import get_default_swarm, get_named_swarm
         swarm = get_named_swarm(session_name) if session_name else get_default_swarm(ip)
         history = swarm.get_history()
 

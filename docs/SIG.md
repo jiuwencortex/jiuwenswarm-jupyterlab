@@ -43,9 +43,13 @@ no WebSocket to an outside process, no separate port.
 ┌───────────────────────────────────────────────────────────────────────  │ ──────────┐
 │                     jiuwenswarm_jupyter  (Python package, in kernel)    │            │
 │                                                                         │            │
-│  magic.py ─────── %%jiuwen / %jiuwen / %jiuwen_error / %jiuwen_clear   │            │
-│                   %jiuwen_export / %jiuwen_replay / %jiuwen_pin         │            │
-│                   %jiuwen_unpin / %jiuwen_chat                          │            │
+│  magics/          IPython magic package                                 │            │
+│   ├── jiuwen.py    %%jiuwen / %jiuwen                                   │            │
+│   ├── error.py     %jiuwen_error                                        │            │
+│   ├── chat.py      %jiuwen_chat                                         │            │
+│   ├── session/     clear · export · replay · pin · unpin · memory       │            │
+│   └── analysis/    explain · test · audit · story · profile ·           │            │
+│                    guard · safe · todo · diff                           │            │
 │                                                                         │            │
 │  client.py ────── JupyterSwarm (wraps JiuWenSwarm, tracks history)      │            │
 │  context.py ───── namespace extraction; pinned variables                │            │
@@ -112,7 +116,12 @@ Notebook, Colab, Kaggle, VS Code, and PyCharm. The TypeScript extension and the
 jiuwenswarm-jupyterlab/
 ├── jiuwenswarm_jupyter/         Python package (installed into the kernel)
 │   ├── __init__.py              Extension entry point; registers comm, magics, tools
-│   ├── magic.py                 All IPython magics (%%jiuwen through %jiuwen_chat)
+│   ├── magics/                  IPython magic package
+│   │   ├── jiuwen.py            %%jiuwen / %jiuwen
+│   │   ├── error.py             %jiuwen_error
+│   │   ├── chat.py              %jiuwen_chat
+│   │   ├── session/             clear · export · replay · pin · unpin · memory
+│   │   └── analysis/            explain · test · audit · story · profile · guard · safe · todo · diff
 │   ├── client.py                JupyterSwarm — wraps JiuWenSwarm; tracks _history
 │   ├── context.py               Notebook context extractor; pinned variable injection
 │   ├── display.py               Streaming IPython output renderer (markdown→HTML)
@@ -157,7 +166,7 @@ jiuwenswarm-jupyterlab/
 The most common path. Works in every environment.
 
 ```
-User (notebook cell)    magic.py          context.py      client.py / JiuWenSwarm    display.py
+User (notebook cell)    magics/jiuwen.py  context.py      client.py / JiuWenSwarm    display.py
         │                   │                  │                     │                    │
         │  %%jiuwen --mode code                │                     │                    │
         │  Write a train/test split            │                     │                    │
@@ -244,7 +253,7 @@ embedded directly in the cell output as an iframe; a JavaScript bridge connects
 it to the running kernel via the classic Jupyter comm API.
 
 ```
-User (notebook)   magic.py (Python)      Cell output HTML + JS          comm_handler.py  JiuWenSwarm
+User (notebook)   magics/chat.py         Cell output HTML + JS          comm_handler.py  JiuWenSwarm
       │                │                          │                              │               │
       │  %jiuwen_chat  │                          │                              │               │
       │───────────────►│                          │                              │               │
@@ -325,7 +334,11 @@ User (notebook)   magic.py (Python)      Cell output HTML + JS          comm_han
 | Module | Responsibility |
 |---|---|
 | `__init__.py` | `load_ipython_extension` entry point; registers magics, comm target, exposes `_jiuwen` and `_jiuwen_config` to the namespace |
-| `magic.py` | All 9 magics: `%%jiuwen`, `%jiuwen`, `%jiuwen_error`, `%jiuwen_clear`, `%jiuwen_export`, `%jiuwen_replay`, `%jiuwen_pin`, `%jiuwen_unpin`, `%jiuwen_chat` |
+| `magics/jiuwen.py` | `%%jiuwen` / `%jiuwen` — primary query magic |
+| `magics/error.py` | `%jiuwen_error` — forward last exception to the agent |
+| `magics/chat.py` | `%jiuwen_chat` — embed full chat UI in cell output |
+| `magics/session/` | `%jiuwen_clear`, `%jiuwen_export`, `%jiuwen_replay`, `%jiuwen_pin`, `%jiuwen_unpin`, `%jiuwen_memory` — conversation lifecycle, context, persistent notes |
+| `magics/analysis/` | `%%jiuwen_explain`, `%%jiuwen_test`, `%jiuwen_audit`, `%jiuwen_story`, `%%jiuwen_profile`, `%%jiuwen_guard`, `%%jiuwen_safe`, `%jiuwen_todo`, `%jiuwen_diff` — code intelligence and safety |
 | `client.py` | `JupyterSwarm` — thin wrapper around `JiuWenSwarm`; adds `_history` list; `run_sync()` drives the stream; `get_history()` / `clear_history()` |
 | `context.py` | `build_context_block(ip, pinned_vars)` — scans `ip.user_ns`, formats DataFrames / arrays / dicts; extracts cell history; injects pinned vars first |
 | `display.py` | `StreamingOutput` — IPython `Output` widget; appends deltas in real time; renders markdown as HTML via `markdown` package or escaped pre-block fallback |

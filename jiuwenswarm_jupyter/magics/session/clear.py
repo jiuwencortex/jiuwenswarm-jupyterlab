@@ -17,7 +17,7 @@ def register(ip) -> None:
             %jiuwen_clear                  # clear the default (current notebook) session
             %jiuwen_clear research         # clear a specific named session
         """
-        from ..session import clear_session, get_default_swarm
+        from ...session import clear_session, get_default_swarm
 
         name = line.strip() or None
         clear_session(name)

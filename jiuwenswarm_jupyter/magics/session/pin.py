@@ -16,7 +16,7 @@ def register(ip) -> None:
 
             %jiuwen_pin df_train results_dict model
         """
-        from ..config import get_config
+        from ...config import get_config
 
         names = line.strip().split()
         if not names:

@@ -18,7 +18,7 @@ def register(ip) -> None:
             %jiuwen_replay        # replay last 3 exchanges (default)
             %jiuwen_replay 5      # replay last 5 exchanges
         """
-        from ..session import get_default_swarm, clear_session
+        from ...session import get_default_swarm, clear_session
 
         n = 3
         arg = line.strip()

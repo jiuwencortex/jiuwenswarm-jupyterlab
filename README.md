@@ -13,10 +13,20 @@ Run single agents and multi-agent swarms directly inside your notebook workflow 
 - Notebook context injection — agent sees your variables, DataFrames, imported packages, and recent cell history automatically
 - Named sessions — carry conversation across multiple cells
 - Multi-agent team mode — spawn parallel agents from a single cell
+- `%%jiuwen_explain` — execute a cell and stream a markdown explanation of what it did and why
+- `%%jiuwen_test` — generate a complete pytest test suite for any function or class
+- `%jiuwen_audit` — full notebook health scan: dead code, data leakage, bad patterns, execution order issues
+- `%jiuwen_story` — convert all executed cells into a narrated blog post, report, paper, or tutorial
+- `%%jiuwen_profile` — profile a cell with cProfile, then get agent-interpreted bottleneck analysis
+- `%%jiuwen_guard` — declare pre/post conditions; agent diagnoses violations automatically
+- `%jiuwen_memory` — persistent cross-notebook knowledge base: save, search, and retrieve findings
+- `%jiuwen_diff` — diff against any git ref and get agent commentary on what changed
+- `%%jiuwen_safe` — static side-effect analysis before you run a risky cell
+- `%jiuwen_todo` — scan for TODO/FIXME/NotImplementedError and draft implementations
 - `%jiuwen_export` — save conversation history to a markdown file
 - `%jiuwen_replay` — continue in a fresh session with recent context replayed
 - `%jiuwen_pin` / `%jiuwen_unpin` — pin variables that are always injected into context
-- `%jiuwen_chat` — embed the full chat UI directly in a cell output (useful in Colab, Kaggle, classic Notebook)
+- `%jiuwen_chat` — embed the full chat UI directly in a cell output (Colab, Kaggle, classic Notebook)
 
 **JupyterLab sidebar panel (requires JupyterLab 4+)**
 - Persistent chat panel in the JupyterLab sidebar — stays open across notebook tabs
@@ -51,20 +61,18 @@ Load the extension:
 %load_ext jiuwenswarm_jupyter
 ```
 
-Use the cell magic:
+Ask the agent a question:
 
 ```
 %%jiuwen
 Analyse the dataframe `df` and identify the three most correlated features with the target column.
 ```
 
-Use the Python API:
+Generate code:
 
-```python
-from jiuwenswarm_jupyter import JupyterSwarm
-
-swarm = JupyterSwarm(mode="code")
-result = await swarm.run("Write a preprocessing pipeline for df")
+```
+%%jiuwen --mode code
+Write a train/test split using stratified sampling on the target column.
 ```
 
 Use multi-agent team mode:
@@ -73,6 +81,29 @@ Use multi-agent team mode:
 %%jiuwen --mode team
 Research the top 3 open-source alternatives to XGBoost for tabular data.
 Assign one agent per library, benchmark each on the attached dataset, and produce a comparison table.
+```
+
+Execute and explain in one step:
+
+```
+%%jiuwen_explain
+model.fit(X_train, y_train)
+print(model.score(X_test, y_test))
+```
+
+Profile and optimise:
+
+```
+%%jiuwen_profile
+for row in df.iterrows():
+    process(row)
+```
+
+Check code before running anything destructive:
+
+```
+%%jiuwen_safe
+shutil.rmtree("output/")
 ```
 
 Embed the full chat UI in a cell (Colab / Kaggle / classic Notebook):
@@ -110,14 +141,13 @@ print(read_notebook_cell(3))
 insert_notebook_cell("print(df.describe())")
 ```
 
-## Magic options
+## Magic reference
 
-| Option | Default | Description |
-|---|---|---|
-| `--mode` | `agent` | Agent mode: `agent`, `code`, `team`, `code.team` |
-| `--session` | notebook default | Named session; reuse across cells |
-| `--no-context` | off | Skip automatic notebook context injection |
-| `--timeout` | 300 | Max seconds to wait for a response |
+See [docs/user/MAGICS.md](docs/user/MAGICS.md) for a complete reference of every magic with usage examples.
+
+## Full user guide
+
+See [docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md) for detailed documentation of every magic, the Python API, sidebar panel setup, and environment-specific notes.
 
 ## Examples
 

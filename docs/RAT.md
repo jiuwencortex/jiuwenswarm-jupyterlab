@@ -99,10 +99,10 @@ Requires JupyterLab 4+ in the browser. Bundled into the Python wheel; no separat
 
 | Sub-requirement | Scope |
 |---|---|
-| Cell magic + Python API | `magic.py`, `client.py`, `session.py`, `context.py`, `display.py` |
+| Cell magic + Python API | `magics/jiuwen.py`, `magics/error.py`, `client.py`, `session.py`, `context.py`, `display.py` |
 | Notebook introspection tools | `notebook_tools.py` |
-| Session history (export / replay / pin) | `client.py`, `magic.py`, `config.py`, `context.py` |
-| Embedded chat UI (`%jiuwen_chat`) | `magic.py`, `packages/shared-webview/chat.html`, `pyproject.toml` force-include |
+| Session history (export / replay / pin) | `client.py`, `magics/session/`, `config.py`, `context.py` |
+| Embedded chat UI (`%jiuwen_chat`) | `magics/chat.py`, `packages/shared-webview/chat.html`, `pyproject.toml` force-include |
 | JupyterLab sidebar panel | `packages/frontend/src/ChatPanel.ts`, `comm_handler.py` |
 | Session list + filter | `SessionManager.ts`, `SessionListPanel.ts` |
 | Swarm map | `SwarmMapPanel.ts`, `SwarmState.ts`, `SwarmStateManager.ts` |
@@ -136,7 +136,7 @@ instead of an interactive Apply/Cancel dialog.
 `packages/shared-webview/chat.html` is the canonical source. It is bundled into the
 Python wheel via hatchling `force-include` and placed at
 `jiuwenswarm_jupyter/static/chat.html` inside the installed package. In development
-(`pip install -e .`), `magic.py` falls back to the source tree path automatically.
+(`pip install -e .`), `magics/chat.py` falls back to the source tree path automatically.
 Keeping two manually maintained copies must be avoided.
 
 **No streaming to messaging platforms:**

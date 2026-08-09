@@ -30,9 +30,13 @@ Both layers call the same in-process `JiuWenSwarm` facade, which lives inside th
 ┌───────────────────────────────────────────────────────────────────────  │ ──────────┐
 │                     jiuwenswarm_jupyter  (Python package, in kernel)    │            │
 │                                                                         │            │
-│  magic.py ─────── %%jiuwen / %jiuwen / %jiuwen_error / %jiuwen_clear   │            │
-│                   %jiuwen_export / %jiuwen_replay / %jiuwen_pin         │            │
-│                   %jiuwen_unpin / %jiuwen_chat                          │            │
+│  magics/          IPython magic package                                 │            │
+│   ├── jiuwen.py    %%jiuwen / %jiuwen                                   │            │
+│   ├── error.py     %jiuwen_error                                        │            │
+│   ├── chat.py      %jiuwen_chat                                         │            │
+│   ├── session/     clear · export · replay · pin · unpin · memory       │            │
+│   └── analysis/    explain · test · audit · story · profile ·           │            │
+│                    guard · safe · todo · diff                           │            │
 │                                                                         │            │
 │  client.py ────── JupyterSwarm (wraps JiuWenSwarm, tracks history)      │            │
 │  context.py ───── namespace extraction; pinned variables                │            │
@@ -77,9 +81,13 @@ Both layers call the same in-process `JiuWenSwarm` facade, which lives inside th
 jiuwenswarm-jupyterlab/
 ├── jiuwenswarm_jupyter/         Python package
 │   ├── __init__.py              Extension entry point; registers comm, magics, tools
-│   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error /
-│   │                            %jiuwen_clear / %jiuwen_export / %jiuwen_replay /
-│   │                            %jiuwen_pin / %jiuwen_unpin
+│   ├── magics/                  IPython magic package
+│   │   ├── jiuwen.py            %%jiuwen / %jiuwen
+│   │   ├── error.py             %jiuwen_error
+│   │   ├── chat.py              %jiuwen_chat
+│   │   ├── session/             clear · export · replay · pin · unpin · memory
+│   │   └── analysis/            explain · test · audit · story · profile
+│   │                            guard · safe · todo · diff
 │   ├── config.py                JiuwenConfig dataclass + %jiuwen_config magic
 │   ├── widgets.py               ipywidgets panel + %jiuwen_panel magic
 │   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm
@@ -133,7 +141,7 @@ jiuwenswarm-jupyterlab/
 %%jiuwen cell magic
     │
     ▼
-magic.py  ─── parse options ──► JupyterSwarm.run_sync()
+magics/jiuwen.py  ── parse options ──► JupyterSwarm.run_sync()
                                         │
                     context.py ◄────────┤
                     (ip.user_ns,        │
@@ -166,7 +174,7 @@ Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython name
 
 ### Error auto-forwarding (`%jiuwen_error`)
 
-`magic.py` registers `%jiuwen_error` as a line magic. When called after an exception, it reads `sys.last_type`, `sys.last_value`, and `sys.last_traceback` to format the full traceback, retrieves the failing cell source from `ip.history_manager.get_tail(n=1)`, and sends the combined context to the default swarm session. An optional extra message on the same line is appended to the query.
+`magics/error.py` registers `%jiuwen_error` as a line magic. When called after an exception, it reads `sys.last_type`, `sys.last_value`, and `sys.last_traceback` to format the full traceback, retrieves the failing cell source from `ip.history_manager.get_tail(n=1)`, and sends the combined context to the default swarm session. An optional extra message on the same line is appended to the query.
 
 ### ipywidgets panel (`%jiuwen_panel`)
 
@@ -174,19 +182,19 @@ Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython name
 
 ### Session clear (`%jiuwen_clear`)
 
-`magic.py` registers `%jiuwen_clear` as a line magic. Called with no arguments, it calls `session.clear_session(None)`, which removes the current default session ID from the registry, then calls `get_default_swarm(ip)` to create a fresh `JupyterSwarm` with a new auto-generated session ID. The new instance replaces `ip.user_ns["_jiuwen"]` and a confirmation message prints the new session ID. Called with an argument (`%jiuwen_clear research`), it clears that named session only.
+`magics/session/clear.py` registers `%jiuwen_clear` as a line magic. Called with no arguments, it calls `session.clear_session(None)`, which removes the current default session ID from the registry, then calls `get_default_swarm(ip)` to create a fresh `JupyterSwarm` with a new auto-generated session ID. The new instance replaces `ip.user_ns["_jiuwen"]` and a confirmation message prints the new session ID. Called with an argument (`%jiuwen_clear research`), it clears that named session only.
 
 ### Session export (`%jiuwen_export`)
 
-`magic.py` registers `%jiuwen_export`. It reads `JupyterSwarm._history` — a list of `{timestamp, mode, query, response}` dicts appended after every successful `run()` call in `client.py` — and writes them to a markdown file in `os.getcwd()`. Supports an optional `--session NAME` flag to export named sessions.
+`magics/session/export.py` registers `%jiuwen_export`. It reads `JupyterSwarm._history` — a list of `{timestamp, mode, query, response}` dicts appended after every successful `run()` call in `client.py` — and writes them to a markdown file in `os.getcwd()`. Supports an optional `--session NAME` flag to export named sessions.
 
 ### Session replay (`%jiuwen_replay`)
 
-`magic.py` registers `%jiuwen_replay [N]`. It reads the last N entries from `JupyterSwarm._history`, formats them into a single context message, calls `session.clear_session()` to create a fresh default session, then sends the context message with `inject_context=False`. The new session inherits the key facts from the old conversation without carrying stale tool call state.
+`magics/session/replay.py` registers `%jiuwen_replay [N]`. It reads the last N entries from `JupyterSwarm._history`, formats them into a single context message, calls `session.clear_session()` to create a fresh default session, then sends the context message with `inject_context=False`. The new session inherits the key facts from the old conversation without carrying stale tool call state.
 
 ### Pinned variables (`%jiuwen_pin` / `%jiuwen_unpin`)
 
-`config.py` adds a `pinned_vars: list` field to `JiuwenConfig`. `magic.py` registers `%jiuwen_pin` (appends names) and `%jiuwen_unpin` (removes names or clears all). `context.py` accepts a `pinned_vars` parameter in `build_context_block()`: pinned variables are extracted first via `_extract_pinned_variables()` into a dedicated **Pinned variables** section, and excluded from the normal `_extract_variables()` sweep to avoid duplication. `client.py` reads `cfg.pinned_vars` from `get_config(ip)` on every `run()` call. When `inject_context=False` but `pinned_vars` is non-empty, only the pinned section is injected.
+`config.py` adds a `pinned_vars: list` field to `JiuwenConfig`. `magics/session/pin.py` registers `%jiuwen_pin` (appends names) and `magics/session/unpin.py` registers `%jiuwen_unpin` (removes names or clears all). `context.py` accepts a `pinned_vars` parameter in `build_context_block()`: pinned variables are extracted first via `_extract_pinned_variables()` into a dedicated **Pinned variables** section, and excluded from the normal `_extract_variables()` sweep to avoid duplication. `client.py` reads `cfg.pinned_vars` from `get_config(ip)` on every `run()` call. When `inject_context=False` but `pinned_vars` is non-empty, only the pinned section is injected.
 
 ### Keyboard interrupt handling
 
@@ -266,11 +274,11 @@ function send(msg) {
 
 1. **JupyterLab sidebar panel** — `ChatPanel.ts` creates an `<iframe>` pointing to `/lab/extensions/@jiuwenswarm/jupyterlab/chat.html` (served by the JupyterLab labextension). It installs `window.__jupyter_send` on the iframe's `contentWindow` and forwards comm events as `postMessage`.
 
-2. **`%jiuwen_chat` magic** — `magic.py` reads `chat.html` directly from the Python package and embeds it as an iframe `srcdoc` in the cell output. A JavaScript bridge in the same output opens a `jiuwenswarm` Jupyter comm using `Jupyter.notebook.kernel.comm_manager` and installs `window.__jupyter_send` on the iframe. This path works in Colab, Kaggle, and classic Notebook where no JupyterLab frontend is running.
+2. **`%jiuwen_chat` magic** — `magics/chat.py` reads `chat.html` directly from the Python package and embeds it as an iframe `srcdoc` in the cell output. A JavaScript bridge in the same output opens a `jiuwenswarm` Jupyter comm using `Jupyter.notebook.kernel.comm_manager` and installs `window.__jupyter_send` on the iframe. This path works in Colab, Kaggle, and classic Notebook where no JupyterLab frontend is running.
 
 Both paths use the same `jiuwenswarm` comm target registered by `comm_handler.py` and the same event schema — `chat.html` itself is unmodified.
 
-**Packaging:** `chat.html` has a single canonical source at `packages/shared-webview/chat.html`. It is included in the Python wheel via `[tool.hatch.build.targets.wheel.force-include]` in `pyproject.toml`, landing at `jiuwenswarm_jupyter/static/chat.html` inside the installed package. In development (`pip install -e .`), `magic.py` falls back to the source tree path automatically.
+**Packaging:** `chat.html` has a single canonical source at `packages/shared-webview/chat.html`. It is included in the Python wheel via `[tool.hatch.build.targets.wheel.force-include]` in `pyproject.toml`, landing at `jiuwenswarm_jupyter/static/chat.html` inside the installed package. In development (`pip install -e .`), `magics/chat.py` falls back to the source tree path automatically.
 
 Incoming events (from the Python kernel via comm) are forwarded to the iframe as `postMessage` calls, which the `window.addEventListener('message', ...)` handler in `chat.html` picks up.
 
