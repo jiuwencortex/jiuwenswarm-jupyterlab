@@ -127,45 +127,45 @@ class StreamRenderer:
     # ── Internal ─────────────────────────────────────────────────────────────
 
     def _handle_chunk(self, chunk: Any) -> None:
-        event_type = getattr(chunk, "type", None) or chunk.get("type", "") if isinstance(chunk, dict) else ""
+        # AgentResponseChunk: { payload: { event_type, ... }, is_complete, ... }
+        if hasattr(chunk, "payload"):
+            payload = chunk.payload if isinstance(chunk.payload, dict) else {}
+            event_type = payload.get("event_type", "")
+        elif isinstance(chunk, dict):
+            payload = chunk
+            event_type = chunk.get("event_type", "") or chunk.get("type", "")
+        else:
+            payload = {}
+            event_type = ""
 
         if event_type in ("chat.delta", "delta"):
-            delta = (
-                chunk.get("delta", "") if isinstance(chunk, dict)
-                else getattr(chunk, "delta", "")
-            )
+            delta = payload.get("delta") or payload.get("content") or payload.get("text") or ""
             if delta:
-                self._text_buf.append(delta)
+                self._text_buf.append(str(delta))
 
         elif event_type in ("tool.call", "tool_call"):
-            name = (
-                chunk.get("name", "tool") if isinstance(chunk, dict)
-                else getattr(chunk, "name", "tool")
-            )
-            args = (
-                chunk.get("args", {}) if isinstance(chunk, dict)
-                else getattr(chunk, "args", {})
-            )
+            tc = payload.get("tool_call") or payload
+            name = tc.get("name", "tool") if isinstance(tc, dict) else "tool"
+            args = tc.get("arguments", {}) if isinstance(tc, dict) else {}
+            if isinstance(args, str):
+                try:
+                    import json as _json
+                    args = _json.loads(args)
+                except Exception:
+                    pass
             self._tool_calls.append({"type": "call", "name": name, "args": args})
 
         elif event_type in ("tool.result", "tool_result"):
-            name = (
-                chunk.get("name", "") if isinstance(chunk, dict)
-                else getattr(chunk, "name", "")
+            name = payload.get("tool_name", "") or (
+                payload.get("tool_call", {}).get("name", "") if isinstance(payload.get("tool_call"), dict) else ""
             )
-            result = (
-                chunk.get("result", "") if isinstance(chunk, dict)
-                else getattr(chunk, "result", "")
-            )
-            self._tool_calls.append({"type": "result", "name": name, "result": result})
+            result = payload.get("result") or payload.get("tool_result") or payload.get("content") or ""
+            self._tool_calls.append({"type": "result", "name": name, "result": str(result)})
 
         elif event_type in ("chat.final", "final"):
-            text = (
-                chunk.get("text", "") if isinstance(chunk, dict)
-                else getattr(chunk, "text", "")
-            )
+            text = payload.get("content") or payload.get("text") or ""
             if text:
-                self._text_buf = [text]
+                self._text_buf = [str(text)]
 
     def _render_html(self, done: bool = False, elapsed: float | None = None) -> str:
         parts: list[str] = []

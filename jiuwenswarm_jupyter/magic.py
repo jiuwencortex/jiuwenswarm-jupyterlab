@@ -98,14 +98,12 @@ _parser = _make_parser()
 def register_magics(ip) -> None:
     """Register all JiuwenSwarm magics with the given IPython shell."""
 
-    @ip.register_magic_function
     def jiuwen(line, cell=None):
         """JiuwenSwarm cell magic — %%jiuwen or %jiuwen."""
         _run_magic(ip, line, cell)
 
-    # Make it available as both line and cell magic
-    ip.register_magic_function(jiuwen, magic_kind="cell", magic_name="jiuwen")
-    ip.register_magic_function(jiuwen, magic_kind="line", magic_name="jiuwen")
+    # Register as both line and cell magic (line_cell sets both tables).
+    ip.register_magic_function(jiuwen, magic_kind="line_cell", magic_name="jiuwen")
 
     _register_error_magic(ip)
     _register_clear_magic(ip)
@@ -119,7 +117,6 @@ def register_magics(ip) -> None:
 def _register_error_magic(ip) -> None:
     """Register %jiuwen_error: forward the last exception to the agent."""
 
-    @ip.register_magic_function
     def jiuwen_error(line: str) -> None:
         """Send the last notebook exception to JiuwenSwarm for debugging.
 
@@ -171,11 +168,12 @@ def _register_error_magic(ip) -> None:
         except KeyboardInterrupt:
             print("\n[JiuwenSwarm] Query cancelled.")
 
+    ip.register_magic_function(jiuwen_error, magic_kind="line", magic_name="jiuwen_error")
+
 
 def _register_clear_magic(ip) -> None:
     """Register %jiuwen_clear: reset the current or named session."""
 
-    @ip.register_magic_function
     def jiuwen_clear(line: str) -> None:
         """Clear the current or named JiuwenSwarm session.
 
@@ -200,11 +198,12 @@ def _register_clear_magic(ip) -> None:
             ip.user_ns["_jiuwen"] = fresh
             print(f"[JiuwenSwarm] Default session cleared. New session: {fresh.session_id}")
 
+    ip.register_magic_function(jiuwen_clear, magic_kind="line", magic_name="jiuwen_clear")
+
 
 def _register_export_magic(ip) -> None:
     """Register %jiuwen_export: save session history to a markdown file."""
 
-    @ip.register_magic_function
     def jiuwen_export(line: str) -> None:
         """Export the current session's conversation history to a markdown file.
 
@@ -274,11 +273,12 @@ def _register_export_magic(ip) -> None:
 
         print(f"[JiuwenSwarm] Exported {len(history)} exchange(s) to {path}")
 
+    ip.register_magic_function(jiuwen_export, magic_kind="line", magic_name="jiuwen_export")
+
 
 def _register_replay_magic(ip) -> None:
     """Register %jiuwen_replay: re-send last N exchanges to a fresh session."""
 
-    @ip.register_magic_function
     def jiuwen_replay(line: str) -> None:
         """Re-send the last N conversation exchanges as context to a fresh session.
 
@@ -335,11 +335,12 @@ def _register_replay_magic(ip) -> None:
         except KeyboardInterrupt:
             print("\n[JiuwenSwarm] Replay cancelled.")
 
+    ip.register_magic_function(jiuwen_replay, magic_kind="line", magic_name="jiuwen_replay")
+
 
 def _register_pin_magic(ip) -> None:
     """Register %jiuwen_pin: always inject named variables into context."""
 
-    @ip.register_magic_function
     def jiuwen_pin(line: str) -> None:
         """Pin variables so they are always injected into context.
 
@@ -373,11 +374,12 @@ def _register_pin_magic(ip) -> None:
             print(f"[JiuwenSwarm] Already pinned: {', '.join(already)}")
         print(f"[JiuwenSwarm] All pinned vars: {cfg.pinned_vars or '(none)'}")
 
+    ip.register_magic_function(jiuwen_pin, magic_kind="line", magic_name="jiuwen_pin")
+
 
 def _register_unpin_magic(ip) -> None:
     """Register %jiuwen_unpin: remove variables from the pinned list."""
 
-    @ip.register_magic_function
     def jiuwen_unpin(line: str) -> None:
         """Remove variables from the pinned context list.
 
@@ -417,11 +419,12 @@ def _register_unpin_magic(ip) -> None:
             print(f"[JiuwenSwarm] Not in pinned list: {', '.join(not_found)}")
         print(f"[JiuwenSwarm] Remaining pinned vars: {cfg.pinned_vars or '(none)'}")
 
+    ip.register_magic_function(jiuwen_unpin, magic_kind="line", magic_name="jiuwen_unpin")
+
 
 def _register_chat_magic(ip) -> None:
     """Register %jiuwen_chat: embed the full chat UI in the cell output."""
 
-    @ip.register_magic_function
     def jiuwen_chat(line: str) -> None:
         """Embed the JiuwenSwarm chat UI directly in the cell output.
 
@@ -567,6 +570,8 @@ def _register_chat_magic(ip) -> None:
         )
 
         display(HTML(output_html))
+
+    ip.register_magic_function(jiuwen_chat, magic_kind="line", magic_name="jiuwen_chat")
 
 
 def _run_magic(ip, line: str, cell: str | None) -> None:

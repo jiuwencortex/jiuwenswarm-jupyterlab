@@ -1,6 +1,6 @@
 # Competitor Comparison — jiuwenswarm-jupyterlab
 
-This document maps the competitive landscape for AI-in-notebook tools as of mid-2025.
+This document maps the competitive landscape for AI-in-notebook tools as of mid-2026.
 
 ---
 

@@ -83,7 +83,6 @@ def get_config(ip=None) -> JiuwenConfig:
 def register_config_magic(ip) -> None:
     """Register the ``%jiuwen_config`` line magic on *ip*."""
 
-    @ip.register_magic_function
     def jiuwen_config(line: str) -> None:
         """Configure JiuwenSwarm notebook defaults.
 
@@ -143,3 +142,5 @@ def register_config_magic(ip) -> None:
                 swarm.timeout = cfg.timeout
 
         print(cfg.summary())
+
+    ip.register_magic_function(jiuwen_config, magic_kind="line", magic_name="jiuwen_config")

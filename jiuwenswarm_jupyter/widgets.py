@@ -166,7 +166,6 @@ def show_jiuwen_panel(ip=None) -> None:
 def register_panel_magic(ip) -> None:
     """Register the ``%jiuwen_panel`` line magic on *ip*."""
 
-    @ip.register_magic_function
     def jiuwen_panel(line: str) -> None:  # noqa: ARG001
         """Open the JiuwenSwarm ipywidgets control panel.
 
@@ -175,3 +174,5 @@ def register_panel_magic(ip) -> None:
             %jiuwen_panel
         """
         show_jiuwen_panel(ip=ip)
+
+    ip.register_magic_function(jiuwen_panel, magic_kind="line", magic_name="jiuwen_panel")

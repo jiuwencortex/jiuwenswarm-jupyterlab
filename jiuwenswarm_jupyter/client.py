@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncIterator, Any
 
 from .session import make_session_id
 
@@ -118,7 +118,6 @@ class JupyterSwarm:
                 full_query = f"{ctx}\n\n---\n\n{query}"
 
         effective_timeout = timeout if timeout is not None else self.timeout
-        swarm = self._get_swarm()
         renderer = StreamRenderer()
 
         import time as _time
@@ -127,11 +126,9 @@ class JupyterSwarm:
         try:
             async with asyncio.timeout(effective_timeout):
                 final_text = await renderer.render(
-                    swarm.process_message_stream(
-                        session_id=self._session_id,
-                        message=full_query,
+                    self._stream_request(
+                        query=full_query,
                         mode=effective_mode,
-                        channel_id="jupyter",
                     )
                 )
         except TimeoutError:
@@ -198,3 +195,27 @@ class JupyterSwarm:
                     "Install it with: pip install jiuwenswarm"
                 ) from exc
         return self._swarm
+
+    async def _stream_request(self, query: str, mode: str) -> AsyncIterator[Any]:
+        """Build an ``AgentRequest`` and stream chunks from the JiuWenSwarm facade.
+
+        The ``JiuWenSwarm.process_message_stream`` API expects a single
+        ``AgentRequest`` carrying ``params`` with ``query`` and ``mode``.
+        """
+        import time as _time
+        from uuid import uuid4
+
+        from jiuwenswarm.common.schema.agent import AgentRequest
+        from jiuwenswarm.common.schema.message import ReqMethod
+
+        request = AgentRequest(
+            request_id=f"jupyter_{uuid4().hex[:12]}",
+            channel_id="jupyter",
+            session_id=self._session_id,
+            req_method=ReqMethod.CHAT_SEND,
+            params={"query": query, "mode": mode},
+            is_stream=True,
+            timestamp=_time.time(),
+        )
+        async for chunk in self._get_swarm().process_message_stream(request):
+            yield chunk
