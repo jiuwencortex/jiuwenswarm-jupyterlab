@@ -33,3 +33,4 @@ Thumbs.db
 /examples/logs/
 /.yarn/
 /jiuwenswarm_jupyter/labextension/
+/yarn.lock
