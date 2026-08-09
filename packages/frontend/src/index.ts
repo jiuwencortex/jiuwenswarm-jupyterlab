@@ -296,13 +296,32 @@ const extension: JupyterFrontEndPlugin<void> = {
     }
 
     // ── Kernel disconnect on notebook close ──────────────────────────────────
-    tracker.widgetRemoved.connect((_, panel) => {
-      const kernel = panel.sessionContext?.session?.kernel;
+    // JupyterLab 4 has no tracker.widgetRemoved; detect closure via the panel's
+    // session context `statusChanged` (becoming 'closed') or currentChanged → null.
+    function _onPanelClosed(panel: any): void {
+      const kernel = panel?.sessionContext?.session?.kernel;
       if (kernel) {
         client.disconnectKernel(kernel.id);
         sessionMgr.unregisterKernel(kernel.id);
         _wiredPanelIds.delete(panel.id);
         console.log('[jiuwenswarm] disconnected kernel on notebook close', kernel.id);
+      }
+    }
+
+    tracker.currentChanged.connect((_, panel) => {
+      // `null` means the last notebook was closed — sweep any remaining comms.
+      if (!panel) {
+        for (const id of client.connectedKernelIds) {
+          client.disconnectKernel(id);
+          sessionMgr.unregisterKernel(id);
+          _wiredPanelIds.delete(id);
+        }
+        return;
+      }
+      if (panel.sessionContext) {
+        panel.sessionContext.statusChanged.connect((ctx: any, status: any) => {
+          if (status === 'closed') _onPanelClosed(panel);
+        });
       }
     });
 

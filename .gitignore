@@ -31,3 +31,5 @@ packages/frontend/dist/
 .DS_Store
 Thumbs.db
 /examples/logs/
+/.yarn/
+/jiuwenswarm_jupyter/labextension/

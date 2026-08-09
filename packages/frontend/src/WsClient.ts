@@ -15,13 +15,20 @@
  * isConnected are preserved as thin wrappers so existing call-sites compile.
  */
 
-import type { IComm } from '@jupyterlab/services/lib/kernel/comm';
-import { KernelEvent, KernelBoundMessage } from './protocol';
+import type { KernelEvent, KernelBoundMessage } from './protocol';
+
+type AnyComm = {
+  onMsg: (msg: any) => void;
+  onClose: () => void;
+  open: (data: any) => Promise<void>;
+  send: (data: any) => void;
+  close: () => void;
+};
 
 type EventHandler = (event: KernelEvent) => void;
 
 export class KernelCommClient {
-  private _comms: Map<string, IComm> = new Map();
+  private _comms: Map<string, AnyComm> = new Map();
   private _activeKernelId: string | null = null;
   private _handlers: EventHandler[] = [];
 
@@ -32,7 +39,7 @@ export class KernelCommClient {
   async connectKernel(id: string, kernel: any): Promise<void> {
     if (this._comms.has(id)) return; // idempotent
 
-    const comm: IComm = kernel.createComm(this._commTarget);
+    const comm: AnyComm = kernel.createComm(this._commTarget);
     comm.onMsg = (msg: any) => {
       const data = msg.content?.data as KernelEvent | undefined;
       if (data) this._dispatch(data);
@@ -100,7 +107,7 @@ export class KernelCommClient {
       console.warn('[jiuwenswarm] no active kernel comm, dropping message', message);
       return;
     }
-    void comm.send(message as Record<string, unknown>);
+    void comm.send(message as unknown as Record<string, unknown>);
   }
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
