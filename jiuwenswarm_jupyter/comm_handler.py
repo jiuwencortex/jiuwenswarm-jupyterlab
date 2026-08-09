@@ -1,11 +1,13 @@
-"""Phase 2: Python kernel side of the Jupyter comm bridge.
+"""Python kernel side of the Jupyter comm bridge.
 
 When the JupyterLab frontend extension connects (TypeScript ChatPanel opens a
 comm to the 'jiuwenswarm' target), this module handles all incoming messages,
 routes them to JiuWenSwarm, and streams events back via comm.send().
 
 The event schema is identical to the IDE WebSocket protocol, so the shared
-chat.html requires no changes to understand the events.
+chat.html requires no changes to understand the events. This means both the
+JupyterLab sidebar panel and the %jiuwen_chat embedded iframe use the same
+comm target and event format.
 
 Registration happens in __init__.py via load_ipython_extension → register_comm_target().
 """

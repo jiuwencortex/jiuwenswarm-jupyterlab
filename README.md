@@ -6,24 +6,31 @@ Run single agents and multi-agent swarms directly inside your notebook workflow 
 
 ## Features
 
-**Phase 1 — works in any Jupyter environment (PyCharm, VS Code, Google Colab, browser)**
+**Works in any Jupyter environment (PyCharm, VS Code, Google Colab, JupyterLab)**
 - `%%jiuwen` cell magic — ask the agent a question, get a streamed answer in the output area
 - `%jiuwen` line magic — one-liner queries from any cell
 - `JupyterSwarm` Python API — programmatic async access to all agent modes
 - Notebook context injection — agent sees your variables, DataFrames, imported packages, and recent cell history automatically
 - Named sessions — carry conversation across multiple cells
 - Multi-agent team mode — spawn parallel agents from a single cell
+- `%jiuwen_export` — save conversation history to a markdown file
+- `%jiuwen_replay` — continue in a fresh session with recent context replayed
+- `%jiuwen_pin` / `%jiuwen_unpin` — pin variables that are always injected into context
+- `%jiuwen_chat` — embed the full chat UI directly in a cell output (useful in Colab, Kaggle, classic Notebook)
 
-**Phase 2 — JupyterLab sidebar panel (requires JupyterLab 4+)**
+**JupyterLab sidebar panel (requires JupyterLab 4+)**
 - Persistent chat panel in the JupyterLab sidebar — stays open across notebook tabs
+- Session list panel with filter and per-notebook grouping
 - Swarm map panel — live visualisation of agent team activity
-- Status bar indicator — shows connection state and active agent count
+- Status bar indicator — connection state, active agent count, session cost
+- Multi-kernel support — switch between notebooks without reconnecting
 - Python kernel comm bridge — all messages stay in-process, no external server
 
-**Phase 3 — Notebook-native agent tools (all environments)**
+**Notebook-native agent tools (all environments)**
 - `read_variable(name)` — inspect any Python variable: DataFrames, arrays, models
 - `read_notebook_cell(index)` — agent reads any previous cell without copy-pasting
 - `insert_notebook_cell(source)` — agent inserts a runnable code cell directly into the notebook
+- `replace_notebook_cell(index, source)` — agent rewrites an existing cell with a diff dialog
 
 ## Installation
 
@@ -68,6 +75,12 @@ Research the top 3 open-source alternatives to XGBoost for tabular data.
 Assign one agent per library, benchmark each on the attached dataset, and produce a comparison table.
 ```
 
+Embed the full chat UI in a cell (Colab / Kaggle / classic Notebook):
+
+```python
+%jiuwen_chat
+```
+
 ## Auto-load on notebook start
 
 Add to `~/.ipython/profile_default/ipython_config.py`:
@@ -80,7 +93,7 @@ c.InteractiveShellApp.extensions = ["jiuwenswarm_jupyter"]
 
 JiuwenSwarm configuration is read from `~/.jiuwenswarm/config/config.yaml` (same as the CLI and IDE plugin). No additional setup is needed if you have already configured JiuwenSwarm.
 
-## Notebook-native tools (Phase 3)
+## Notebook-native tools
 
 Use directly from any cell:
 

@@ -27,14 +27,14 @@ npm install
 
 ## Local development setup
 
-### Python package only (Phase 1)
+### Python package only (cell magics and notebook tools)
 
 ```bash
 pip install -e ".[dev]"
 %load_ext jiuwenswarm_jupyter   # in a notebook
 ```
 
-### Full JupyterLab extension (Phase 2)
+### Full JupyterLab extension (includes sidebar panel)
 
 ```bash
 # Build TypeScript
@@ -69,12 +69,16 @@ pytest tests/
 cd packages/frontend
 npm run build   # production build → dist/
 
-# 2. Build Python wheel (bundles frontend)
+# 2. Build Python wheel (bundles frontend + chat.html)
 cd ../..
 python -m build --wheel
 
 # Output: dist/jiuwenswarm_jupyter-X.Y.Z-py3-none-any.whl
 ```
+
+> `packages/shared-webview/chat.html` is automatically included in the wheel at
+> `jiuwenswarm_jupyter/static/chat.html` via the `force-include` entry in
+> `pyproject.toml`. No manual copy step is needed.
 
 ---
 
@@ -124,10 +128,11 @@ Credentials: use an API token (`__token__` as username, token as password), or c
 
 ## Compatibility matrix
 
-| JupyterLab | Python | Status |
+| Environment | Python | Status |
 |---|---|---|
-| 4.x | 3.10–3.12 | supported (Phase 2 target) |
-| 3.x | 3.10–3.12 | not tested (Phase 2 may support with minor changes) |
-| classic Notebook | 3.10–3.12 | Phase 1 only (cell magic works, sidebar panel does not) |
-| Google Colab | 3.10–3.12 | Phase 1 only (standard pip + IPython magic) |
-| VS Code Notebooks | 3.10–3.12 | Phase 1 only |
+| JupyterLab 4.x | 3.10–3.12 | Full support — cell magics, sidebar panel, swarm map |
+| JupyterLab 3.x | 3.10–3.12 | Not tested — sidebar panel may work with minor changes |
+| classic Notebook | 3.10–3.12 | Cell magics and notebook tools work; sidebar panel does not |
+| Google Colab | 3.10–3.12 | Cell magics, notebook tools, and `%jiuwen_chat` work |
+| VS Code Notebooks | 3.10–3.12 | Cell magics and notebook tools work; sidebar panel does not |
+| Kaggle Notebooks | 3.10–3.12 | Cell magics, notebook tools, and `%jiuwen_chat` work |

@@ -192,6 +192,33 @@ The panel provides:
 
 ---
 
+## `%jiuwen_chat` — embedded full chat UI
+
+Embeds the full JiuwenSwarm chat interface — the same one used by the JupyterLab sidebar panel — directly inside the cell output area. The iframe connects to the running kernel via the Jupyter comm channel, so all agent modes, session persistence, and notebook context injection work normally.
+
+```
+%jiuwen_chat               # default height (520 px)
+%jiuwen_chat --height 700  # taller panel
+```
+
+Most useful in environments without the JupyterLab sidebar:
+
+- **Google Colab** — type your query, receive streaming responses, switch modes
+- **Kaggle Notebooks** — same as Colab
+- **Classic Jupyter Notebook** — the browser-embedded panel replaces the sidebar
+
+In JupyterLab the sidebar panel is the preferred interface, but `%jiuwen_chat` works there too.
+
+The embedded chat UI supports the same features as the sidebar:
+- All four agent modes (`agent`, `code`, `team`, `code.team`)
+- Streaming response rendering with markdown and code block formatting
+- Tool call display (collapsible cards)
+- Session persistence (same session as `%%jiuwen` in the same kernel)
+
+> **Note:** `%jiuwen_chat` requires the `jiuwenswarm` comm target to be registered, which happens automatically when you `%load_ext jiuwenswarm_jupyter`. In JupyterLab, if both the sidebar and a `%jiuwen_chat` cell are open, they share the same kernel — messages from one appear in both.
+
+---
+
 ## `%jiuwen_clear` — reset conversation context
 
 Start a fresh conversation without restarting the kernel:

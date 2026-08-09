@@ -1,6 +1,6 @@
-"""Phase 3: Notebook-native agent tools.
+"""Notebook-native agent tools.
 
-Three tools the agent can invoke when running inside a Jupyter notebook:
+Tools the agent can invoke when running inside a Jupyter notebook:
 
     read_notebook_cell(cell_index)
         Read the source and output of any previously-run cell.
@@ -12,15 +12,15 @@ Three tools the agent can invoke when running inside a Jupyter notebook:
         Works with DataFrames, numpy arrays, dicts, models — anything.
 
     insert_notebook_cell(source, cell_type)
-        Propose a new code or markdown cell.  In Phase 2 (sidebar panel
-        active) the cell is inserted directly into the notebook via comm.
-        In Phase 1 (magic-only) it is displayed in the output area so the
-        user can copy it.
+        Propose a new code or markdown cell.  With the JupyterLab sidebar
+        connected, the cell is inserted directly into the notebook via comm.
+        Without the sidebar, it is displayed in the output area.
 
     replace_notebook_cell(cell_index, new_source)
         Rewrite an existing cell identified by its execution history index.
-        Shows a before/after diff.  In Phase 2 the user sees an Apply/Cancel
-        dialog in JupyterLab; in Phase 1 the diff is rendered in the output.
+        Shows a before/after diff.  With the sidebar connected, the user sees
+        an Apply/Cancel dialog in JupyterLab; without it, the diff is rendered
+        in the output area.
 
 Usage — direct call from a cell:
 
@@ -146,12 +146,12 @@ def insert_notebook_cell(
 ) -> str:
     """Insert a new cell into the current notebook.
 
-    Phase 2 (JupyterLab sidebar active): inserts via Jupyter comm → the
+    With the JupyterLab sidebar connected: inserts via Jupyter comm → the
     TypeScript frontend uses the JupyterLab notebook API to create the cell.
     When *confirm_execute* is True, a JupyterLab dialog is shown before
-    running; in Phase 1 the user is prompted via ``input()``.
+    running; in other environments the user is prompted via ``input()``.
 
-    Phase 1 (magic only): renders the proposed cell in the output area.
+    Without the sidebar: renders the proposed cell in the output area.
 
     Parameters
     ----------
@@ -162,8 +162,9 @@ def insert_notebook_cell(
     execute:
         If True, execute the cell immediately after insertion.
     confirm_execute:
-        If True (and *execute* is True), ask the user before running.  In
-        Phase 2 this shows a JupyterLab dialog; in Phase 1 uses ``input()``.
+        If True (and *execute* is True), ask the user before running.  With
+        the sidebar connected this shows a JupyterLab dialog; otherwise uses
+        ``input()``.
     ip:
         IPython shell.  Auto-detected if None.
 
@@ -177,12 +178,12 @@ def insert_notebook_cell(
     if not source.strip():
         return "Error: source is empty."
 
-    # Phase 2 path: confirmation and execution are handled by the TypeScript frontend
+    # Sidebar path: confirmation and execution are handled by the TypeScript frontend
     if _comm_insert(source, cell_type, execute, confirm_execute):
         action = " and queued for execution" if execute else ""
         return f"Cell inserted{action} into notebook."
 
-    # Phase 1 fallback: display proposed cell in output area
+    # No-sidebar fallback: display proposed cell in output area
     _display_proposed_cell(source, cell_type)
 
     if execute and cell_type == "code" and confirm_execute:
@@ -205,10 +206,10 @@ def replace_notebook_cell(cell_index: int, new_source: str, ip=None) -> str:
     Identifies the cell by its execution history index — the same index
     returned by :func:`read_notebook_cell`.
 
-    In Phase 2 (JupyterLab sidebar active): sends the old and new source to
+    With the JupyterLab sidebar connected: sends the old and new source to
     the TypeScript frontend, which shows a diff dialog with Apply/Cancel.
 
-    In Phase 1 (magic only): renders a coloured unified diff in the cell
+    Without the sidebar: renders a coloured unified diff in the cell
     output area so the user can review and apply the change manually.
 
     Parameters
@@ -251,11 +252,11 @@ def replace_notebook_cell(cell_index: int, new_source: str, ip=None) -> str:
     if old_source.strip() == new_source.strip():
         return "No changes: new_source is identical to the current cell."
 
-    # Phase 2 path: interactive diff dialog in JupyterLab
+    # Sidebar path: interactive diff dialog in JupyterLab
     if _comm_replace(old_source, new_source, line_no):
         return "Diff dialog opened in JupyterLab. Click Apply to replace the cell."
 
-    # Phase 1 fallback: render diff in the output area
+    # No-sidebar fallback: render diff in the output area
     _display_diff(old_source, new_source)
     return "Diff displayed above. Update the cell source manually to apply the change."
 
@@ -339,8 +340,8 @@ TOOL_DEFINITIONS: list[dict] = [
         "description": (
             "Rewrite an existing notebook cell with new source code, showing a diff before applying. "
             "Use this instead of insert_notebook_cell when you want to fix or improve code the user "
-            "already has in a cell. The user must approve the change via a dialog (Phase 2) or "
-            "review the diff in the output area (Phase 1)."
+            "already has in a cell. The user must approve the change via a diff dialog (JupyterLab sidebar) or "
+            "review the diff in the output area (other environments)."
         ),
         "parameters": {
             "type": "object",
@@ -469,7 +470,7 @@ def _format_dict(name: str, d: dict) -> str:
 
 
 def _comm_insert(source: str, cell_type: str, execute: bool, confirm_execute: bool = False) -> bool:
-    """Try to insert via Jupyter comm (Phase 2 path). Returns True on success.
+    """Try to insert via Jupyter comm (sidebar path). Returns True on success.
 
     Sends ``jiuwen_generated: true`` so the frontend can tag the inserted cell
     with ``cell.metadata.jiuwen_generated = true``.  When ``confirm_execute``
@@ -495,7 +496,7 @@ def _display_proposed_cell(source: str, cell_type: str) -> None:
     """Render the proposed cell as formatted HTML in the output area.
 
     A ``# [jiuwen]`` tag is prepended to code cells so agent-generated code
-    is identifiable even without the Phase 2 comm path.
+    is identifiable even without the sidebar comm path.
     """
     import html as _html
     # Tag code cells so the source is identifiable
@@ -517,7 +518,7 @@ def _display_proposed_cell(source: str, cell_type: str) -> None:
 
 
 def _comm_replace(old_source: str, new_source: str, line_no: int) -> bool:
-    """Try to send a cell-replace request via Jupyter comm (Phase 2 path). Returns True on success.
+    """Try to send a cell-replace request via Jupyter comm (sidebar path). Returns True on success.
 
     Sends ``{type, old_source, new_source, line_no}`` to the
     ``jiuwenswarm_cell_replace`` comm target registered in TypeScript.
@@ -539,7 +540,7 @@ def _comm_replace(old_source: str, new_source: str, line_no: int) -> bool:
 
 
 def _display_diff(old_source: str, new_source: str) -> None:
-    """Render a coloured unified diff in the output area (Phase 1 fallback)."""
+    """Render a coloured unified diff in the output area (no-sidebar fallback)."""
     import difflib
     import html as _html
 
@@ -577,7 +578,7 @@ def _display_diff(old_source: str, new_source: str) -> None:
         display(HTML(
             f"<div style='border:1px solid #555; border-radius:4px; margin:6px 0; overflow:auto'>"
             f"<div style='font-size:11px; color:#888; padding:6px 8px; font-weight:600; background:#111'>"
-            f"&#9651; JiuwenSwarm — proposed cell rewrite (Phase 1: apply manually)</div>"
+            f"&#9651; JiuwenSwarm — proposed cell rewrite (apply manually)</div>"
             f"{body_html}"
             f"</div>"
         ))

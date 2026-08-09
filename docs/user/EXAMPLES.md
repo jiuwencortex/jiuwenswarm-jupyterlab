@@ -42,7 +42,7 @@ That is all. After this, `%load_ext jiuwenswarm_jupyter` in any notebook starts 
 
 | What you want to use | What you need |
 |---|---|
-| `%%jiuwen` magic, `%jiuwen`, Python API, Phase 3 tools | `pip install` + `jiuwenswarm-init` (one-time) |
+| `%%jiuwen` magic, `%jiuwen`, Python API, notebook tools | `pip install` + `jiuwenswarm-init` (one-time) |
 | JupyterLab sidebar chat panel, swarm map | The above + build the TypeScript frontend (see [PUBLISHING.md](../operations/PUBLISHING.md)) |
 
 The examples below all work with just `pip install` + `jiuwenswarm-init`. You do not need to build anything for them.
@@ -140,7 +140,7 @@ Both issues are fixed.
 
 ---
 
-## Example 3 — The agent inserts the code cell for you (JupyterLab with sidebar panel, Phase 2)
+## Example 3 — The agent inserts the code cell for you (JupyterLab with sidebar panel)
 
 **Who:** Same scenario as Example 2, but you have the JupyterLab sidebar panel installed.
 
@@ -177,7 +177,7 @@ df["last_complaint_date"] = pd.to_datetime(df["last_complaint_date"], errors="co
 
 You just press **Shift+Enter** in that cell to run it. Done.
 
-This is the `insert_notebook_cell` tool (Phase 3) being called automatically by the agent. You never had to ask for it explicitly — the agent decided the best way to deliver the code was to put it directly in the notebook rather than just show it in the chat.
+This is the `insert_notebook_cell` tool being called automatically by the agent. You never had to ask for it explicitly — the agent decided the best way to deliver the code was to put it directly in the notebook rather than just show it in the chat.
 
 ---
 
@@ -287,11 +287,11 @@ Write a function that calculates the 20-day rolling average and returns a new li
 
 The output appears in the PyCharm cell output area, streaming in real time, exactly as it would in a browser. You get a `rolling_average()` function you can immediately call.
 
-> **Note:** The JupyterLab sidebar panel (Phase 2) does not work in PyCharm — that requires a browser-based JupyterLab. Everything in Phase 1 and Phase 3 works normally in PyCharm.
+> **Note:** The JupyterLab sidebar panel does not work in PyCharm — that requires a browser-based JupyterLab. All cell magics and notebook tools work normally in PyCharm.
 
 ---
 
-## Example 7 — Inspecting a trained model (Phase 3 tools)
+## Example 7 — Inspecting a trained model
 
 **Who:** An ML engineer who just trained a model and wants the agent to evaluate it.
 
@@ -390,7 +390,7 @@ The function should take X, y, a model, and k as input.
 
 The agent streams a complete implementation. The student can run it immediately in the next cell.
 
-> **Note:** Phase 2 (JupyterLab sidebar panel) does not work in Google Colab — Colab has its own frontend and does not support JupyterLab extensions. Phase 1 and Phase 3 work normally.
+> **Note:** The JupyterLab sidebar panel does not work in Google Colab — Colab has its own frontend and does not support JupyterLab extensions. All cell magics and notebook tools work normally. Use `%jiuwen_chat` for an embedded chat UI.
 
 ---
 
@@ -468,6 +468,42 @@ View the current config at any time:
 
 ---
 
+## Example 13 — Embedded full chat UI (`%jiuwen_chat`)
+
+**Who:** A data scientist using Google Colab who wants a GUI instead of cell magic syntax.
+
+**Where:** Google Colab (or any environment without the JupyterLab sidebar).
+
+---
+
+After loading the extension, run this in any cell:
+
+```python
+%jiuwen_chat
+```
+
+The cell output area becomes a fully interactive chat panel — the same themed interface used by the JupyterLab sidebar. A text input at the bottom accepts queries; responses stream in with markdown rendering, code blocks, and collapsible tool call cards.
+
+The panel is connected to the running kernel via the Jupyter comm channel. It shares the same session as your `%%jiuwen` cells — you can mix magic cells and the chat panel in the same notebook.
+
+**Height control:**
+
+```python
+%jiuwen_chat --height 700   # taller panel for long conversations
+```
+
+**What works inside `%jiuwen_chat`:**
+
+- All four agent modes (`agent`, `code`, `team`, `code.team`) via the mode selector
+- Session persistence — same conversation continues if you scroll back to the cell
+- Notebook context injection — the agent sees your variables and recent cells
+- Streaming response rendering with typing indicator
+- Tool call display (collapsible cards showing what the agent did)
+
+**In JupyterLab:** The sidebar panel is preferred, but `%jiuwen_chat` works there too. Both connect to the same kernel — useful for having the chat panel visible alongside a specific output cell.
+
+---
+
 ## Summary — What works where
 
 **Does JiuwenSwarm need to be running as a separate process?**
@@ -476,11 +512,14 @@ No. Unlike the IDE plugin (which connects to a server on port 18092), this Jupyt
 | Feature | JupyterLab (Chrome) | PyCharm | Google Colab | VS Code Notebooks |
 |---|---|---|---|---|
 | Separate JiuwenSwarm server needed? | **No** | **No** | **No** | **No** |
-| Extra setup beyond `pip install`? | Only for Phase 2 sidebar | No | No | No |
+| Extra setup beyond `pip install`? | Only for sidebar | No | No | No |
 | `%%jiuwen` cell magic | Yes | Yes | Yes | Yes |
 | `%jiuwen` line magic | Yes | Yes | Yes | Yes |
 | `%jiuwen_error` — forward last exception | Yes | Yes | Yes | Yes |
 | `%jiuwen_config` — per-notebook settings | Yes | Yes | Yes | Yes |
+| `%jiuwen_export` — save conversation history | Yes | Yes | Yes | Yes |
+| `%jiuwen_replay` — continue in fresh session | Yes | Yes | Yes | Yes |
+| `%jiuwen_pin` / `%jiuwen_unpin` | Yes | Yes | Yes | Yes |
 | Context injection (variables, DataFrames) | Yes | Yes | Yes | Yes |
 | Named sessions | Yes | Yes | Yes | Yes |
 | Session persistence across kernel restarts | Yes | Yes | Yes | Yes |
@@ -489,11 +528,11 @@ No. Unlike the IDE plugin (which connects to a server on port 18092), this Jupyt
 | `read_variable()` | Yes | Yes | Yes | Yes |
 | `read_notebook_cell()` | Yes | Yes | Yes | Yes |
 | `insert_notebook_cell()` — display block fallback | Yes | Yes | Yes | Yes |
-| JupyterLab sidebar chat panel | Yes (Phase 2) | No | No | No |
-| Session list panel (sidebar) | Yes (Phase 2) | No | No | No |
-| Skills browser panel (sidebar) | Yes (Phase 2) | No | No | No |
-| Swarm map panel | Yes (Phase 2) | No | No | No |
-| `insert_notebook_cell()` — actual cell insertion | Yes (Phase 2 only) | No | No | No |
-| Agent-generated cell tagging (metadata) | Yes (Phase 2) | No | No | No |
-| Keyboard shortcuts (`Cmd+Shift+J` / `N`) | Yes (Phase 2) | No | No | No |
-| Status bar indicator | Yes (Phase 2) | No | No | No |
+| `%jiuwen_chat` — embedded full chat UI | Yes | No | Yes | No |
+| JupyterLab sidebar chat panel | Yes | No | No | No |
+| Session list panel (sidebar) | Yes | No | No | No |
+| Swarm map panel (sidebar) | Yes | No | No | No |
+| `insert_notebook_cell()` — actual cell insertion | Yes (sidebar) | No | No | No |
+| Agent-generated cell tagging (metadata) | Yes (sidebar) | No | No | No |
+| Keyboard shortcuts (`Cmd+Shift+J` / `N`) | Yes (sidebar) | No | No | No |
+| Status bar indicator | Yes (sidebar) | No | No | No |

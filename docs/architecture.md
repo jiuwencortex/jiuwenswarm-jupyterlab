@@ -35,6 +35,9 @@ jiuwenswarm-jupyterlab/
 ├── packages/
 │   ├── shared-webview/          Copied from jiuwenswarm-ide + Jupyter bridge patch
 │   │   ├── chat.html            Chat UI (vanilla JS, no build step)
+│   │   │                        Bundled into wheel at jiuwenswarm_jupyter/static/chat.html
+│   │   │                        via pyproject.toml force-include; also read directly
+│   │   │                        by %jiuwen_chat magic (dev fallback: source tree path)
 │   │   ├── swarm_map.html       Swarm map visualisation
 │   │   └── icon.svg
 │   │
@@ -193,14 +196,22 @@ function send(msg) {
   } else if (window.__jb_send) {
     window.__jb_send(JSON.stringify(msg));   // JetBrains
   } else if (window.__jupyter_send) {
-    window.__jupyter_send(JSON.stringify(msg)); // JupyterLab
+    window.__jupyter_send(JSON.stringify(msg)); // JupyterLab / %jiuwen_chat
   } else {
     console.warn('[webview] no bridge available, msg:', msg);
   }
 }
 ```
 
-`ChatPanel.ts` installs `window.__jupyter_send` on the iframe's `contentWindow` after the iframe loads. This function routes messages to `KernelCommClient.send()`, which sends them to the Python kernel via Jupyter comm.
+`chat.html` is used in two ways in this project:
+
+1. **JupyterLab sidebar panel** — `ChatPanel.ts` creates an `<iframe>` pointing to `/lab/extensions/@jiuwenswarm/jupyterlab/chat.html` (served by the JupyterLab labextension). It installs `window.__jupyter_send` on the iframe's `contentWindow` and forwards comm events as `postMessage`.
+
+2. **`%jiuwen_chat` magic** — `magic.py` reads `chat.html` directly from the Python package and embeds it as an iframe `srcdoc` in the cell output. A JavaScript bridge in the same output opens a `jiuwenswarm` Jupyter comm using `Jupyter.notebook.kernel.comm_manager` and installs `window.__jupyter_send` on the iframe. This path works in Colab, Kaggle, and classic Notebook where no JupyterLab frontend is running.
+
+Both paths use the same `jiuwenswarm` comm target registered by `comm_handler.py` and the same event schema — `chat.html` itself is unmodified.
+
+**Packaging:** `chat.html` has a single canonical source at `packages/shared-webview/chat.html`. It is included in the Python wheel via `[tool.hatch.build.targets.wheel.force-include]` in `pyproject.toml`, landing at `jiuwenswarm_jupyter/static/chat.html` inside the installed package. In development (`pip install -e .`), `magic.py` falls back to the source tree path automatically.
 
 Incoming events (from the Python kernel via comm) are forwarded to the iframe as `postMessage` calls, which the `window.addEventListener('message', ...)` handler in `chat.html` picks up.
 

@@ -50,6 +50,11 @@ Issues = "https://github.com/openjiuwen/jiuwenswarm-jupyterlab/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["jiuwenswarm_jupyter"]
 
+[tool.hatch.build.targets.wheel.force-include]
+# Single source of truth for chat.html — bundled into the wheel at build time.
+# In development (pip install -e .) magic.py falls back to the source path.
+"packages/shared-webview/chat.html" = "jiuwenswarm_jupyter/static/chat.html"
+
 [tool.hatch.build.targets.wheel.shared-data]
 "packages/frontend/dist" = "share/jupyter/labextensions/@jiuwenswarm/jupyterlab"
 

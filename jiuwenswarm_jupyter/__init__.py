@@ -12,18 +12,23 @@ Public API:
     get_default_swarm     — per-notebook shared instance
     JiuwenConfig          — per-notebook config dataclass
     get_config            — return or create current notebook config
-    read_variable         — inspect any notebook variable (Phase 3)
-    read_notebook_cell    — read source + output of any cell (Phase 3)
-    insert_notebook_cell  — insert a new cell into the notebook (Phase 3)
-    replace_notebook_cell — rewrite an existing cell with a diff dialog (Phase 3)
+    read_variable         — inspect any notebook variable
+    read_notebook_cell    — read source + output of any cell
+    insert_notebook_cell  — insert a new cell into the notebook
+    replace_notebook_cell — rewrite an existing cell with a diff dialog
     show_jiuwen_panel     — ipywidgets interactive control panel (requires ipywidgets)
 
 Magics registered on load:
-    %%jiuwen / %jiuwen    — send query to agent (Phase 1)
+    %%jiuwen / %jiuwen    — send query to agent, stream response
     %jiuwen_config        — view or change per-notebook settings
     %jiuwen_error         — forward last exception to agent for debugging
     %jiuwen_clear         — reset current or named session context
+    %jiuwen_export        — export conversation history to a markdown file
+    %jiuwen_replay        — continue in a fresh session with recent context
+    %jiuwen_pin           — always inject named variables into context
+    %jiuwen_unpin         — remove variables from the pinned list
     %jiuwen_panel         — open the ipywidgets control panel
+    %jiuwen_chat          — embed the full chat UI (chat.html) in the cell output
 """
 
 from .client import JupyterSwarm
@@ -48,36 +53,31 @@ __version__ = "0.1.0"
 
 def load_ipython_extension(ip):
     """Called by %load_ext jiuwenswarm_jupyter."""
-    # Phase 1: %%jiuwen / %jiuwen / %jiuwen_error
     from .magic import register_magics
     register_magics(ip)
 
-    # Per-notebook configuration magic: %jiuwen_config
     from .config import register_config_magic
     register_config_magic(ip)
 
-    # ipywidgets panel: %jiuwen_panel
     try:
         from .widgets import register_panel_magic
         register_panel_magic(ip)
     except Exception:
         pass
 
-    # Phase 2: register comm target so the JupyterLab sidebar panel can connect.
+    # Register comm target so the JupyterLab sidebar panel can connect.
     # Print a one-line status so users know which mode is active.
     try:
         from .comm_handler import register_comm_target
         if register_comm_target(ip):
-            print("[JiuwenSwarm] Phase 2 active — JupyterLab comm connected.")
+            print("[JiuwenSwarm] Sidebar connected — JupyterLab comm active.")
         else:
             print(
-                "[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. "
-                "Cell insertion will show display blocks."
+                "[JiuwenSwarm] Running without sidebar — cell insertion will use display blocks."
             )
     except Exception:
         print(
-            "[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. "
-            "Cell insertion will show display blocks."
+            "[JiuwenSwarm] Running without sidebar — cell insertion will use display blocks."
         )
 
     # Expose default session as _jiuwen and config as _jiuwen_config
