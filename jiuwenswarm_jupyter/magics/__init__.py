@@ -15,16 +15,33 @@ magics/
 │   ├── unpin.py   %jiuwen_unpin
 │   └── memory.py  %jiuwen_memory
 │
-└── analysis/      — code intelligence, safety, profiling, generation
-    ├── explain.py  %%jiuwen_explain
-    ├── test_gen.py %%jiuwen_test
-    ├── audit.py    %jiuwen_audit
-    ├── story.py    %jiuwen_story
-    ├── profile.py  %%jiuwen_profile
-    ├── guard.py    %%jiuwen_guard
-    ├── safe.py     %%jiuwen_safe
-    ├── todo.py     %jiuwen_todo
-    └── diff.py     %jiuwen_diff
+├── analysis/      — code intelligence, safety, profiling, generation
+│   ├── explain.py   %%jiuwen_explain
+│   ├── test_gen.py  %%jiuwen_test
+│   ├── audit.py     %jiuwen_audit
+│   ├── story.py     %jiuwen_story
+│   ├── profile.py   %%jiuwen_profile
+│   ├── guard.py     %%jiuwen_guard
+│   ├── safe.py      %%jiuwen_safe
+│   ├── todo.py      %jiuwen_todo
+│   ├── diff.py      %jiuwen_diff
+│   ├── doc.py       %%jiuwen_doc
+│   └── benchmark.py %%jiuwen_benchmark
+│
+├── data/          — data science: EDA, schema, features, SQL, viz
+│   ├── eda.py       %jiuwen_eda
+│   ├── schema.py    %jiuwen_schema
+│   ├── hypothesis.py %jiuwen_hypothesis
+│   ├── features.py  %jiuwen_features
+│   ├── leakage.py   %jiuwen_leakage
+│   ├── df_magic.py  %%jiuwen_df
+│   ├── sql.py       %%jiuwen_sql
+│   └── viz.py       %%jiuwen_viz
+│
+└── workflow/      — experiment lifecycle: tracking, reproduction, model cards
+    ├── track.py     %jiuwen_track
+    ├── reproduce.py %jiuwen_reproduce
+    └── card.py      %jiuwen_card
 
 Each leaf module exposes a ``register(ip)`` function.
 Each sub-package exposes a ``register_all(ip)`` function.
@@ -33,9 +50,9 @@ Each sub-package exposes a ``register_all(ip)`` function.
 
 from __future__ import annotations
 
-from . import analysis, chat, error, jiuwen, session
+from . import analysis, chat, data, error, jiuwen, session, workflow
 
-__all__ = ["register_all", "jiuwen", "error", "chat", "session", "analysis"]
+__all__ = ["register_all", "jiuwen", "error", "chat", "session", "analysis", "data", "workflow"]
 
 
 def register_all(ip) -> None:
@@ -50,3 +67,9 @@ def register_all(ip) -> None:
 
     # Analysis — code intelligence and safety
     analysis.register_all(ip)
+
+    # Data — EDA, features, SQL, viz
+    data.register_all(ip)
+
+    # Workflow — experiment tracking, reproduction, model cards
+    workflow.register_all(ip)
