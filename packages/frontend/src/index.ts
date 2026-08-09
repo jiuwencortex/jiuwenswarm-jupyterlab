@@ -287,13 +287,24 @@ const extension: JupyterFrontEndPlugin<void> = {
 
     // ── Status bar ──────────────────────────────────────────────────────────
     if (statusBar) {
-      const indicator = new StatusIndicator(client, swarmMgr);
+      const indicator = new StatusIndicator(client, swarmMgr, sessionMgr);
       statusBar.registerStatusItem(PLUGIN_ID, {
         item: indicator,
         align: 'right',
         rank: 100,
       });
     }
+
+    // ── Kernel disconnect on notebook close ──────────────────────────────────
+    tracker.widgetRemoved.connect((_, panel) => {
+      const kernel = panel.sessionContext?.session?.kernel;
+      if (kernel) {
+        client.disconnectKernel(kernel.id);
+        sessionMgr.unregisterKernel(kernel.id);
+        _wiredPanelIds.delete(panel.id);
+        console.log('[jiuwenswarm] disconnected kernel on notebook close', kernel.id);
+      }
+    });
 
     // ── Commands ─────────────────────────────────────────────────────────────
     const commands = {

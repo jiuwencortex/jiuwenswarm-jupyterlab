@@ -11,7 +11,7 @@ Usage:
 from __future__ import annotations
 
 import shlex
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 
@@ -30,6 +30,9 @@ class JiuwenConfig:
 
     model: str | None = None
     """Override the default LLM model (None = use JiuwenSwarm default)."""
+
+    pinned_vars: list = field(default_factory=list)
+    """Variable names always injected into context regardless of auto-context sweep."""
 
     def update(self, **kwargs: Any) -> list[str]:
         """Apply ``key=value`` updates. Returns a list of error strings (empty = success)."""
@@ -60,7 +63,8 @@ class JiuwenConfig:
     def summary(self) -> str:
         lines = ["JiuwenSwarm notebook config:"]
         for f in fields(self):
-            lines.append(f"  {f.name:20s} = {getattr(self, f.name)!r}")
+            val = getattr(self, f.name)
+            lines.append(f"  {f.name:20s} = {val!r}")
         return "\n".join(lines)
 
 

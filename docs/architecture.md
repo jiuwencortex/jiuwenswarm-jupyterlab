@@ -2,15 +2,13 @@
 
 ## Overview
 
-`jiuwenswarm-jupyterlab` provides three layers on top of JiuwenSwarm:
+`jiuwenswarm-jupyterlab` integrates JiuwenSwarm into Jupyter environments across two layers:
 
-1. **Phase 1 — Python package (`jiuwenswarm_jupyter`)** — in-process API and `%%jiuwen` cell magic. Works in any Jupyter environment (JupyterLab, classic Notebook, VS Code Notebooks, Google Colab, Kaggle).
+- **Python kernel layer** (`jiuwenswarm_jupyter`) — cell magics, a Python API, notebook introspection tools, and a Jupyter comm handler. Works in any Jupyter environment: JupyterLab, classic Notebook, VS Code Notebooks, Google Colab, Kaggle.
 
-2. **Phase 2 — JupyterLab frontend extension (`@jiuwenswarm/jupyterlab`)** — TypeScript sidebar panel with persistent chat UI and swarm map, embedded as iframes loaded from the shared-webview HTML files. Communication uses Jupyter comm (in-process, no external server).
+- **JupyterLab frontend extension** (`@jiuwenswarm/jupyterlab`) — TypeScript sidebar panel with persistent chat UI, session browser, swarm map, and status bar indicator. Communicates with the Python layer via Jupyter comm; no external server or WebSocket is required.
 
-3. **Phase 3 — Notebook-native tools** — `read_variable`, `read_notebook_cell`, `insert_notebook_cell` let the agent inspect and modify notebook state directly.
-
-All three phases call the same in-process `JiuWenSwarm` facade; no external server or WebSocket is required.
+Both layers call the same in-process `JiuWenSwarm` facade, which lives inside the notebook kernel process.
 
 ---
 
@@ -19,20 +17,20 @@ All three phases call the same in-process `JiuWenSwarm` facade; no external serv
 ```
 jiuwenswarm-jupyterlab/
 ├── jiuwenswarm_jupyter/         Python package
-│   ├── __init__.py              Extension entry point; wires Phase 1+2+3 on load
-│   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error /   [Phase 1]
-│   │                            %jiuwen_clear
-│   ├── config.py                JiuwenConfig dataclass + %jiuwen_config [Phase 1]
-│   ├── widgets.py               ipywidgets panel + %jiuwen_panel magic  [Phase 1]
-│   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm [Phase 1]
-│   ├── context.py               Notebook context extractor              [Phase 1]
-│   ├── display.py               IPython streaming output renderer;      [Phase 1]
+│   ├── __init__.py              Extension entry point; registers comm, magics, tools
+│   ├── magic.py                 %%jiuwen / %jiuwen / %jiuwen_error /
+│   │                            %jiuwen_clear / %jiuwen_export / %jiuwen_replay /
+│   │                            %jiuwen_pin / %jiuwen_unpin
+│   ├── config.py                JiuwenConfig dataclass + %jiuwen_config magic
+│   ├── widgets.py               ipywidgets panel + %jiuwen_panel magic
+│   ├── client.py                JupyterSwarm wrapper around JiuWenSwarm
+│   ├── context.py               Notebook context extractor (variables, cells, packages)
+│   ├── display.py               IPython streaming output renderer;
 │   │                            markdown→HTML via `markdown` pkg or fallback
-│   ├── session.py               Session ID, registry, restart recovery  [Phase 1]
-│   ├── comm_handler.py          Kernel comm target + event streaming    [Phase 2]
-│   └── notebook_tools.py        read_variable / read_notebook_cell /   [Phase 3]
+│   ├── session.py               Session ID, registry, restart recovery
+│   ├── comm_handler.py          Kernel comm target + event streaming to frontend
+│   └── notebook_tools.py        read_variable / read_notebook_cell /
 │                                insert_notebook_cell / replace_notebook_cell
-│                                (confirm_execute, diff dialog, cell tagging)
 │
 ├── packages/
 │   ├── shared-webview/          Copied from jiuwenswarm-ide + Jupyter bridge patch
@@ -40,11 +38,11 @@ jiuwenswarm-jupyterlab/
 │   │   ├── swarm_map.html       Swarm map visualisation
 │   │   └── icon.svg
 │   │
-│   └── frontend/                TypeScript JupyterLab extension (Phase 2)
+│   └── frontend/                TypeScript JupyterLab extension
 │       ├── src/
 │       │   ├── index.ts         Extension entry point + plugin registration
-│       │   ├── WsClient.ts      Kernel comm bridge (replaces WebSocket)
-│       │   ├── SessionManager.ts Session registry
+│       │   ├── WsClient.ts      Kernel comm bridge (one IComm per kernel)
+│       │   ├── SessionManager.ts Session registry, partitioned by kernel
 │       │   ├── protocol.ts      Shared message types
 │       │   ├── NotebookContextCollector.ts  Active notebook context
 │       │   ├── SwarmState.ts    State model for swarm map
@@ -65,7 +63,7 @@ jiuwenswarm-jupyterlab/
 
 ---
 
-## Phase 1: In-process Python API
+## Python kernel layer
 
 ### Data flow
 
@@ -92,15 +90,17 @@ magic.py  ─── parse options ──► JupyterSwarm.run_sync()
                               Cell output area (live-updating HTML)
 ```
 
-### Session persistence
+### Session management
 
 Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython namespace as `_jiuwen`. Subsequent `%%jiuwen` cells in the same notebook continue the same conversation. Named sessions (`--session research`) create separate `JupyterSwarm` instances in a thread-safe registry.
 
 **Restart recovery:** On load, `session.py` checks `~/.jiuwenswarm/jupyter_sessions.json` for a previously saved session ID keyed by working directory (`os.getcwd()`). If found and younger than 30 days, the same session ID is restored so the agent can continue the conversation after a kernel restart. The session ID is saved every time a new default session is created.
 
+**Conversation history:** Each `JupyterSwarm` instance maintains `_history` — a list of `{timestamp, mode, query, response}` dicts appended after every successful `run()` call. Used by `%jiuwen_export` and `%jiuwen_replay`.
+
 ### Per-notebook configuration
 
-`config.py` provides `JiuwenConfig` — a dataclass storing per-notebook defaults (`mode`, `timeout`, `inject_context`, `model`). The `%jiuwen_config` magic lets users view or change these from any cell. The current config is stored in `_jiuwen_config` in the IPython namespace. Individual `%%jiuwen` flag overrides take precedence over config values.
+`config.py` provides `JiuwenConfig` — a dataclass storing per-notebook defaults (`mode`, `timeout`, `inject_context`, `model`, `pinned_vars`). The `%jiuwen_config` magic lets users view or change these from any cell. The current config is stored in `_jiuwen_config` in the IPython namespace. Individual `%%jiuwen` flag overrides take precedence over config values.
 
 ### Error auto-forwarding (`%jiuwen_error`)
 
@@ -114,15 +114,27 @@ Each notebook kernel gets one `JupyterSwarm` instance stored in the IPython name
 
 `magic.py` registers `%jiuwen_clear` as a line magic. Called with no arguments, it calls `session.clear_session(None)`, which removes the current default session ID from the registry, then calls `get_default_swarm(ip)` to create a fresh `JupyterSwarm` with a new auto-generated session ID. The new instance replaces `ip.user_ns["_jiuwen"]` and a confirmation message prints the new session ID. Called with an argument (`%jiuwen_clear research`), it clears that named session only.
 
-### Keyboard interrupt handling in Phase 1
+### Session export (`%jiuwen_export`)
+
+`magic.py` registers `%jiuwen_export`. It reads `JupyterSwarm._history` — a list of `{timestamp, mode, query, response}` dicts appended after every successful `run()` call in `client.py` — and writes them to a markdown file in `os.getcwd()`. Supports an optional `--session NAME` flag to export named sessions.
+
+### Session replay (`%jiuwen_replay`)
+
+`magic.py` registers `%jiuwen_replay [N]`. It reads the last N entries from `JupyterSwarm._history`, formats them into a single context message, calls `session.clear_session()` to create a fresh default session, then sends the context message with `inject_context=False`. The new session inherits the key facts from the old conversation without carrying stale tool call state.
+
+### Pinned variables (`%jiuwen_pin` / `%jiuwen_unpin`)
+
+`config.py` adds a `pinned_vars: list` field to `JiuwenConfig`. `magic.py` registers `%jiuwen_pin` (appends names) and `%jiuwen_unpin` (removes names or clears all). `context.py` accepts a `pinned_vars` parameter in `build_context_block()`: pinned variables are extracted first via `_extract_pinned_variables()` into a dedicated **Pinned variables** section, and excluded from the normal `_extract_variables()` sweep to avoid duplication. `client.py` reads `cfg.pinned_vars` from `get_config(ip)` on every `run()` call. When `inject_context=False` but `pinned_vars` is non-empty, only the pinned section is injected.
+
+### Keyboard interrupt handling
 
 Both `%%jiuwen` and `%jiuwen_error` wrap the `run_sync()` call in `try/except KeyboardInterrupt`. When the user presses Ctrl+C (kernel interrupt) while a cell is running, the exception is caught and `[JiuwenSwarm] Query cancelled.` is printed — the interrupt does not propagate and crash the kernel.
 
-### Phase 1/2 status on load
+### Status on load
 
 `load_ipython_extension` in `__init__.py` calls `register_comm_target(ip)` and prints one of:
-- `[JiuwenSwarm] Phase 2 active — JupyterLab comm connected.` when the comm target registered successfully (JupyterLab 4+ with frontend installed)
-- `[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. Cell insertion will show display blocks.` otherwise
+- `[JiuwenSwarm] Sidebar connected — JupyterLab comm active.` when the comm target registered successfully (JupyterLab 4+ with frontend installed)
+- `[JiuwenSwarm] Running without sidebar — cell insertion will use display blocks.` otherwise
 
 ### `JupyterSwarm` mode setter and instance timeout
 
@@ -131,7 +143,8 @@ Both `%%jiuwen` and `%jiuwen_error` wrap the `run_sync()` call in `try/except Ke
 ### Context injection
 
 Before each request, `context.py` extracts:
-- All non-private variables from `ip.user_ns` with type summaries
+- **Pinned variables** (always, even with `--no-context`) — from `cfg.pinned_vars`, rendered in a dedicated top section
+- All non-private variables from `ip.user_ns` with type summaries (skipping any already pinned)
 - Pandas DataFrames: shape, dtypes, `.head(3)` preview
 - NumPy arrays: shape and dtype
 - Last 5 cell inputs from `ip.history_manager`
@@ -144,41 +157,43 @@ This is injected as a fenced block before the user query, so the agent understan
 
 ---
 
-## Phase 2: JupyterLab sidebar panel
+## JupyterLab frontend extension
 
-### Architecture
+### Plugin registration
 
-The JupyterLab extension is a standard `JupyterFrontEndPlugin` that:
-1. Registers a sidebar chat panel (iframe embedding `chat.html`, rank 500)
-2. Registers a sidebar session list panel (`SessionListPanel`, rank 501)
-3. Registers a main-area swarm map panel (iframe embedding `swarm_map.html`)
-4. Adds a status bar indicator showing connection state and active agent count
-5. Exposes command palette entries and keyboard shortcuts
-6. Registers a `jiuwenswarm_cell_insert` comm target for agent-initiated cell insertion
-7. Registers a `jiuwenswarm_cell_replace` comm target for agent-initiated cell rewrites with diff review
+The JupyterLab extension is a standard `JupyterFrontEndPlugin` that registers:
+1. Sidebar chat panel (iframe embedding `chat.html`, rank 500)
+2. Sidebar session list panel (`SessionListPanel`, rank 501)
+3. Main-area swarm map panel (iframe embedding `swarm_map.html`)
+4. Status bar indicator (connection state, cost, active kernel label)
+5. Command palette entries and keyboard shortcuts
+6. `jiuwenswarm_cell_insert` comm target for agent-initiated cell insertion
+7. `jiuwenswarm_cell_replace` comm target for agent-initiated cell rewrites with diff review
 
 **Keyboard shortcuts** registered in `index.ts`:
 - `Cmd/Ctrl+Shift+J` → `open-chat`
 - `Cmd/Ctrl+Shift+N` → `new-session`
 
-**`jiuwenswarm_cell_insert` comm target:** When the Python `insert_notebook_cell()` function runs in a Phase 2 environment, it opens a one-shot comm of this target name with a payload containing `source`, `cell_type`, `execute`, and `jiuwen_generated`. TypeScript receives this via `kernel.registerCommTarget()` and calls the `_handleCellInsert()` function, which uses `NotebookActions.insertBelow`, `setSource`, optional `changeCellType`, `setMetadata('jiuwen_generated', true)`, and optionally `NotebookActions.run()`.
+### Cell comm targets
 
-**`jiuwenswarm_cell_replace` comm target:** When the Python `replace_notebook_cell()` function runs in a Phase 2 environment, it opens a one-shot comm with payload `{old_source, new_source, line_no}`. TypeScript `_handleCellReplace()` finds the matching cell by content (`old_source`), renders a before/after HTML diff inside a `showDialog` Widget body, and applies `sharedModel.setSource(new_source)` only if the user clicks Apply.
+**`jiuwenswarm_cell_insert`:** When the Python `insert_notebook_cell()` function is called from a kernel connected to the JupyterLab sidebar, it opens a one-shot comm of this target name with a payload containing `source`, `cell_type`, `execute`, and `jiuwen_generated`. TypeScript receives this via `kernel.registerCommTarget()` and calls `_handleCellInsert()`, which uses `NotebookActions.insertBelow`, `setSource`, optional `changeCellType`, `setMetadata('jiuwen_generated', true)`, and optionally `NotebookActions.run()`.
 
-**Cell tagging:** Cells inserted via comm are tagged `cell.metadata.jiuwen_generated = true`. In Phase 1 environments (no frontend), the source is prepended with `# [jiuwen] Generated by JiuwenSwarm` so agent-generated code is identifiable in any environment.
+**`jiuwenswarm_cell_replace`:** When the Python `replace_notebook_cell()` function is called from a kernel connected to the JupyterLab sidebar, it opens a one-shot comm with payload `{old_source, new_source, line_no}`. TypeScript `_handleCellReplace()` finds the matching cell by content, renders a before/after HTML diff inside a `showDialog` Widget body, and applies `sharedModel.setSource(new_source)` only if the user clicks Apply.
+
+**Cell tagging:** Cells inserted via comm are tagged `cell.metadata.jiuwen_generated = true`. In environments without the sidebar, the source is prepended with `# [jiuwen] Generated by JiuwenSwarm` so agent-generated code is identifiable everywhere.
 
 ### Shared-webview reuse
 
-`chat.html` and `swarm_map.html` are the same files used by the VS Code and JetBrains IDE plugins. They contain a bridge detection block that detects which host environment they are running in:
+`chat.html` and `swarm_map.html` are the same files used by the VS Code and JetBrains IDE plugins. They contain a bridge detection block that selects the right message transport at runtime:
 
 ```javascript
 function send(msg) {
   if (vscodeApi) {
-    vscodeApi.postMessage(msg);         // VS Code
+    vscodeApi.postMessage(msg);              // VS Code
   } else if (window.__jb_send) {
-    window.__jb_send(JSON.stringify(msg)); // JetBrains
+    window.__jb_send(JSON.stringify(msg));   // JetBrains
   } else if (window.__jupyter_send) {
-    window.__jupyter_send(JSON.stringify(msg)); // JupyterLab (added here)
+    window.__jupyter_send(JSON.stringify(msg)); // JupyterLab
   } else {
     console.warn('[webview] no bridge available, msg:', msg);
   }
@@ -250,13 +265,29 @@ _wireKernel(panel)                        ← skipped if already connected
 panel.sessionContext.kernelChanged fires (kernel restart)
     └─ _wireKernel(panel)                  re-wires with new kernel object
        (_wiredPanelIds set prevents stacking listeners per panel)
+
+tracker.widgetRemoved fires (notebook tab closed)
+    └─ client.disconnectKernel(id)
+       sessionMgr.unregisterKernel(id)
+       _wiredPanelIds.delete(panel.id)
 ```
 
 **Active kernel routing:** `client.send()` always routes to `_comms.get(_activeKernelId)`. Switching tabs sets `_activeKernelId` on both the client and `SessionManager`, so chat messages go to the focused notebook's kernel without user action.
 
 **Session partitioning:** `SessionManager._sessionsByKernel: Map<string, SessionInfo[]>` stores sessions per kernel. The `sessions` getter returns only the active kernel's sessions (used by `ChatPanel`). `SessionListPanel` uses `allKernels()` and `getKernelSessions()` to render grouped sections when more than one kernel is connected; single-kernel stays flat.
 
-**Python side:** No changes required. Each kernel is a separate process with its own `comm_handler.py` and `_active_tasks` dict, so isolation is free.
+**Python side:** Each kernel is a separate process with its own `comm_handler.py` and `_active_tasks` dict, so isolation is automatic.
+
+### Status bar
+
+`StatusIndicator` receives `client: KernelCommClient`, `swarmMgr: SwarmStateManager`, and `sessionMgr: SessionManager`. It:
+- Listens to `chat.final` events and accumulates `usage.cost_usd` into `_sessionCost`. The cost resets when the active kernel changes.
+- Reads `sessionMgr.allKernels()` and `client.activeKernelId` on every update. When more than one kernel is connected, the active notebook filename is appended to the status text.
+- Status text format: `⬤ JiuwenSwarm: ready · analysis.ipynb · $0.0031`
+
+### Session list filter
+
+`SessionListPanel` has a filter `<input>` element between the header row and the session list. Typing sets `_filter` (lowercased) and triggers `_render()`. Sessions are matched by checking if their title (or `session_id`) lowercased includes the filter string. The filter applies to both flat and grouped (multi-kernel) views.
 
 ### Distribution
 
@@ -264,17 +295,17 @@ The extension is distributed as a Python package that bundles the built TypeScri
 
 ---
 
-## Phase 3: Notebook-native tools
+## Notebook-native tools
 
-`notebook_tools.py` provides four functions that operate directly on the live notebook kernel state.
+`notebook_tools.py` provides four functions that operate directly on the live notebook kernel state. They are also registered as agent tools so the agent can call them automatically during a conversation.
 
 ### `read_notebook_cell(cell_index)`
 
-Reads from `ip.history_manager.get_tail()` (execution history) and `ip.user_ns["Out"]` (output dict).  Returns a dict with `source`, `output`, and `line_number`.
+Reads from `ip.history_manager.get_tail()` (execution history) and `ip.user_ns["Out"]` (output dict). Returns a dict with `source`, `output`, and `line_number`.
 
 ### `read_variable(name)`
 
-Reads from `ip.user_ns[name]`.  Dispatches to type-specific formatters:
+Reads from `ip.user_ns[name]`. Dispatches to type-specific formatters:
 - `DataFrame` → shape, dtypes, `.head(5)`, `.describe()`
 - `ndarray` → shape, dtype, min/max/mean, first values
 - `dict` / `list` → length + JSON preview
@@ -282,10 +313,10 @@ Reads from `ip.user_ns[name]`.  Dispatches to type-specific formatters:
 
 ### `insert_notebook_cell(source, cell_type, execute, confirm_execute)`
 
-Two paths:
+Two paths depending on whether the JupyterLab sidebar is connected:
 
 ```
-Phase 2 active (JupyterLab sidebar connected):
+Sidebar connected:
     _comm_insert() → comm.create_comm("jiuwenswarm_cell_insert").open(payload)
     Payload: { source, cell_type, execute, confirm_execute, jiuwen_generated: true }
     → TypeScript _handleCellInsert():
@@ -294,7 +325,7 @@ Phase 2 active (JupyterLab sidebar connected):
         if execute (and confirmed): NotebookActions.run()
         cell.model.setMetadata('jiuwen_generated', true)
 
-Phase 1 only (no sidebar):
+No sidebar (Colab, classic Notebook, etc.):
     _display_proposed_cell() renders the source as formatted HTML
     if confirm_execute and execute: input("Run? [y/N]") before notifying user
 ```
@@ -304,7 +335,7 @@ Phase 1 only (no sidebar):
 Two paths:
 
 ```
-Phase 2 active (JupyterLab sidebar connected):
+Sidebar connected:
     _comm_replace() → comm.create_comm("jiuwenswarm_cell_replace").open(payload)
     Payload: { old_source, new_source, line_no }
     → TypeScript _handleCellReplace():
@@ -313,7 +344,7 @@ Phase 2 active (JupyterLab sidebar connected):
         showDialog("Apply cell rewrite?", body=diffWidget, [Cancel, Apply])
         On Apply: cell.sharedModel.setSource(new_source)
 
-Phase 1 only (no sidebar):
+No sidebar:
     _display_diff() renders a coloured unified diff (difflib.unified_diff)
     as HTML in the cell output area — user applies the change manually
 ```
@@ -337,5 +368,5 @@ Phase 1 only (no sidebar):
 | Session ID prefix | `vscode_*` / `jb_*` | `jupyter_*` |
 | Agent API | `JiuWenSwarm` via WebSocket | `JiuWenSwarm` direct in-process |
 | Notebook tools | not applicable | `read_variable`, `read_notebook_cell`, `insert_notebook_cell`, `replace_notebook_cell` |
-| Cell insertion | diff/patch to file | comm → JupyterLab notebook API (Phase 2) or display block (Phase 1) |
-| Cell rewrite | diff/patch to file | comm → diff dialog → `sharedModel.setSource()` (Phase 2) or `difflib` HTML (Phase 1) |
+| Cell insertion | diff/patch to file | comm → JupyterLab notebook API (sidebar) or display block (no sidebar) |
+| Cell rewrite | diff/patch to file | comm → diff dialog → `sharedModel.setSource()` (sidebar) or `difflib` HTML (no sidebar) |

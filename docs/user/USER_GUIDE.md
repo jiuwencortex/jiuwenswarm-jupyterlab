@@ -6,7 +6,7 @@
 pip install jiuwenswarm-jupyter
 ```
 
-This installs the Python package only. The JupyterLab sidebar panel (Phase 2) requires the additional frontend build step described in [PUBLISHING.md](../operations/PUBLISHING.md).
+The JupyterLab sidebar panel requires the TypeScript frontend to be built. See [PUBLISHING.md](../operations/PUBLISHING.md) for the full build and install steps.
 
 ## Loading the extension
 
@@ -32,10 +32,12 @@ If the file does not exist, create it with:
 ipython profile create
 ```
 
-After loading, a one-line status message tells you which mode is active:
+After loading, a one-line status message confirms the environment:
 
-- `[JiuwenSwarm] Phase 2 active — JupyterLab comm connected.` — the sidebar panel is available.
-- `[JiuwenSwarm] Phase 1 mode — JupyterLab sidebar not detected. Cell insertion will show display blocks.` — you are in Phase 1 only. Everything works except `insert_notebook_cell`/`replace_notebook_cell` will display output blocks instead of editing the notebook directly.
+- `[JiuwenSwarm] Sidebar connected — JupyterLab comm active.` — the sidebar panel is available and connected to this kernel.
+- `[JiuwenSwarm] Running without sidebar — cell insertion will use display blocks.` — the extension loaded but the JupyterLab frontend is not present. All cell magics, notebook tools, and the Python API work normally; `insert_notebook_cell`/`replace_notebook_cell` show output blocks instead of editing the notebook in-place.
+
+---
 
 ## Cell magic — `%%jiuwen`
 
@@ -80,7 +82,7 @@ produce a comparison table.
 
 By default, all `%%jiuwen` cells in a notebook share one persistent session — the agent remembers previous exchanges.
 
-Use `--session` to create independent threads:
+Use `--session` to create independent conversation threads:
 
 ```
 %%jiuwen --session research
@@ -110,6 +112,8 @@ What is the capital of France?
 Run a full hyperparameter search across 5 models and summarise the results.
 ```
 
+---
+
 ## Line magic — `%jiuwen`
 
 For short single-line queries:
@@ -117,6 +121,8 @@ For short single-line queries:
 ```python
 %jiuwen What is the shape of df?
 ```
+
+---
 
 ## `%jiuwen_config` — per-notebook settings
 
@@ -128,6 +134,7 @@ View or change configuration defaults that apply to all `%%jiuwen` cells in the 
 %jiuwen_config timeout=600           # change default timeout (seconds)
 %jiuwen_config inject_context=false  # disable automatic context injection
 %jiuwen_config model=gpt-4o          # override model for this notebook
+%jiuwen_config reset                 # restore all defaults
 ```
 
 | Setting | Default | Description |
@@ -136,8 +143,11 @@ View or change configuration defaults that apply to all `%%jiuwen` cells in the 
 | `timeout` | `300` | Request timeout in seconds |
 | `inject_context` | `true` | Auto-inject notebook variables and cell history |
 | `model` | _(from config.yaml)_ | Override the configured model |
+| `pinned_vars` | `[]` | Variables always injected regardless of other settings |
 
 The config is stored in `_jiuwen_config` in the notebook namespace. Individual `%%jiuwen --mode code` flags still override the config for that cell only.
+
+---
 
 ## `%jiuwen_error` — forward last exception to agent
 
@@ -155,6 +165,8 @@ The magic automatically reads the exception traceback and the source of the fail
 ```
 
 The agent receives the full traceback and the failing cell source — you do not need to copy anything manually.
+
+---
 
 ## `%jiuwen_panel` — interactive control panel
 
@@ -178,6 +190,8 @@ The panel provides:
 - Query text area + Send button
 - Streaming output rendered in-place
 
+---
+
 ## `%jiuwen_clear` — reset conversation context
 
 Start a fresh conversation without restarting the kernel:
@@ -187,13 +201,63 @@ Start a fresh conversation without restarting the kernel:
 %jiuwen_clear research         # clear a specific named session
 ```
 
-`%jiuwen_clear` creates a new session ID and replaces the current entry in the session registry and `_jiuwen`. The agent has no memory of the previous conversation after this point. Named sessions (`%%jiuwen --session <name>`) can be cleared individually.
+`%jiuwen_clear` creates a new session ID and replaces the current entry in the session registry and `_jiuwen`. The agent has no memory of the previous conversation after this point. Named sessions can be cleared individually.
 
 After clearing, the new session ID is printed:
 
 ```
 [JiuwenSwarm] Default session cleared. New session: jupyter_a1b2c3d4
 ```
+
+---
+
+## `%jiuwen_export` — save conversation to file
+
+Export the full conversation history of a session to a markdown file in the current directory:
+
+```
+%jiuwen_export                              # writes jiuwen_session_<id>.md
+%jiuwen_export my_research_notes.md        # explicit filename
+%jiuwen_export --session research notes.md # export a named session
+```
+
+Each exchange is saved as a numbered section with timestamp, mode, the user query, and the agent response. The file is human-readable markdown — open it in any text editor or Jupyter markdown cell.
+
+---
+
+## `%jiuwen_replay` — continue in a fresh session
+
+Re-send the last N conversation exchanges as context into a brand-new session. Useful when a conversation has drifted off-topic but you want the agent to remember the key results:
+
+```
+%jiuwen_replay        # replay last 3 exchanges (default)
+%jiuwen_replay 5      # replay last 5 exchanges
+```
+
+The original session is not modified. A new default session is created and the replayed context is sent first, so the agent acknowledges the history before you continue.
+
+---
+
+## `%jiuwen_pin` / `%jiuwen_unpin` — always-included variables
+
+Pin specific variables so they are always injected into the agent's context, even when `--no-context` is used or the automatic sweep would skip them:
+
+```
+%jiuwen_pin df_train results_dict model     # pin several variables
+%jiuwen_unpin df_train                      # remove one from pinned list
+%jiuwen_unpin all                           # clear all pinned variables
+```
+
+Pinned variables appear in a **Pinned variables** section at the top of the context block, with full type summaries. Useful in large notebooks where the auto-context sweep picks up too many irrelevant variables.
+
+The current pinned list is visible in `%jiuwen_config`:
+
+```
+%jiuwen_config
+  pinned_vars          = ['df_train', 'model']
+```
+
+---
 
 ## Python API
 
@@ -234,7 +298,7 @@ The conversation history is kept on the server side and the agent will remember 
 
 ---
 
-## Phase 2 — JupyterLab sidebar panel
+## JupyterLab sidebar panel
 
 The sidebar panel requires JupyterLab 4+ and the TypeScript frontend to be built and installed.
 
@@ -255,24 +319,24 @@ When JupyterLab opens in the browser, a JiuwenSwarm icon appears in the left sid
 
 - The panel works the same way as `%%jiuwen` — same agent modes, same session persistence, same context injection.
 - When a multi-agent team is running, a **Swarm Map** tab opens automatically showing live agent activity.
-- The status bar at the bottom of JupyterLab shows connection state and, during a team run, the number of active agents.
+- The status bar at the bottom of JupyterLab shows connection state, active agent count during team runs, accumulated session cost (when API usage is metered), and the active notebook name when multiple kernels are open.
+- The **Sessions panel** has a filter input at the top — type to narrow sessions by title across all kernels.
 
 ### Sidebar panels
 
-The left sidebar contains three JiuwenSwarm panels (accessible via the sidebar icons or command palette):
-
 | Panel | Description |
 |---|---|
-| **Chat** (rank 1) | Main conversation panel — same as `%%jiuwen` but interactive |
-| **Sessions** (rank 2) | Browse and switch between named sessions; click "+ New" to start one |
+| **Chat** | Main conversation panel — same as `%%jiuwen` but interactive |
+| **Sessions** | Browse and switch between sessions; filter by title; click "+ New" to start one |
 
-### Multi-kernel support
+### Multiple notebooks
 
 You can have several notebooks open at the same time, each with its own kernel. The sidebar handles this automatically:
 
 - When you **switch to a different notebook tab**, the chat panel connects to that tab's kernel. All messages you send go to the focused notebook's agent.
 - The **Sessions panel** shows sessions grouped by notebook when more than one kernel is connected. Each group is headed by the notebook filename.
-- If a **kernel restarts**, the sidebar re-connects without any manual action. Prior sessions from that kernel remain in the list until the new kernel reports its own session list.
+- If a **kernel restarts**, the sidebar re-connects without any manual action.
+- When a **notebook is closed**, the sidebar disconnects from that kernel and removes its sessions from the list.
 
 No configuration is needed — just open multiple notebooks normally.
 
@@ -283,7 +347,7 @@ No configuration is needed — just open multiple notebooks normally.
 | `Cmd/Ctrl+Shift+J` | Open the chat panel |
 | `Cmd/Ctrl+Shift+N` | Start a new session |
 
-### Opening panels from the command palette
+### Command palette
 
 Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac) → search "JiuwenSwarm":
 
@@ -292,15 +356,11 @@ Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac) → search "JiuwenSwarm":
 - `JiuwenSwarm: New Session` — start a fresh conversation
 - `JiuwenSwarm: Open Session List` — open the sessions panel
 
-### Agent-generated cell tagging
-
-When the agent inserts a cell via `insert_notebook_cell` and the JupyterLab frontend is active, the cell is tagged with `cell.metadata.jiuwen_generated = true`. In environments without the frontend (Phase 1), inserted code cells start with a `# [jiuwen] Generated by JiuwenSwarm` comment so they remain identifiable.
-
 ---
 
-## Phase 3 — Notebook-native tools
+## Notebook tools
 
-These four tools are available from any cell as plain Python functions — no magic needed.
+These four functions are available from any cell as plain Python — no magic needed. The agent also calls them automatically when it needs to inspect your notebook state.
 
 ### `read_variable(name)`
 
@@ -315,10 +375,6 @@ print(read_variable("df"))
 # First 5 rows:
 #    age  income  target
 # 0   32  55000.0       1
-# ...
-# Numeric summary:
-#         age        income     target
-# count  10000.0  10000.0  10000.0
 # ...
 ```
 
@@ -336,8 +392,6 @@ print(info["source"])   # the code you wrote in cell 2
 print(info["output"])   # what it printed or returned
 ```
 
-Useful when you want to ask the agent about something you ran earlier without copy-pasting.
-
 ### `insert_notebook_cell(source, cell_type, execute, confirm_execute)`
 
 Insert a new cell into the notebook:
@@ -345,13 +399,13 @@ Insert a new cell into the notebook:
 ```python
 from jiuwenswarm_jupyter import insert_notebook_cell
 
-# Insert and display (user runs manually)
+# Insert a cell (user runs it manually)
 insert_notebook_cell("print(df.describe())", cell_type="code")
 
-# Insert and run immediately (JupyterLab Phase 2 only)
+# Insert and run immediately
 insert_notebook_cell("print(df.describe())", cell_type="code", execute=True)
 
-# Insert and ask before running (shows a dialog in JupyterLab; input() prompt in Phase 1)
+# Insert and ask for confirmation before running
 insert_notebook_cell(
     "df.drop(columns=['id'], inplace=True)",
     cell_type="code",
@@ -360,28 +414,29 @@ insert_notebook_cell(
 )
 ```
 
-- In **JupyterLab with the sidebar panel active (Phase 2)**: the cell appears immediately in the notebook. With `confirm_execute=True`, a "Run generated cell?" dialog is shown before execution.
-- In **any other environment (Phase 1)**: the code is displayed as a formatted block in the output area. With `confirm_execute=True`, the user is prompted via `input()`.
+In **JupyterLab with the sidebar connected**: the cell appears directly in the notebook. With `confirm_execute=True`, a dialog is shown before execution.
+
+In **other environments** (classic Notebook, Colab, VS Code Notebooks): the source is displayed as a formatted block in the cell output. With `confirm_execute=True`, the user is prompted via `input()`.
 
 ### `replace_notebook_cell(cell_index, new_source)`
 
-Rewrite an existing cell, showing a before/after diff for review before applying:
+Rewrite an existing cell, with a before/after diff shown for review before applying:
 
 ```python
 from jiuwenswarm_jupyter import replace_notebook_cell
 
-# Propose a rewrite of cell 3 — user must confirm before it is applied
 replace_notebook_cell(3, "df = df.dropna(subset=['target'])")
 ```
 
-- In **JupyterLab with the sidebar panel active (Phase 2)**: a diff dialog appears showing the old cell source (red) and the proposed replacement (green). Click **Apply** to update the cell or **Cancel** to discard.
-- In **any other environment (Phase 1)**: a coloured unified diff is rendered in the cell output area. The user must apply the change manually by editing the cell.
+In **JupyterLab with the sidebar connected**: a diff dialog appears showing the old source (red) and the proposed replacement (green). Click **Apply** to update the cell or **Cancel** to discard.
 
-`cell_index` uses the same zero-based execution-history scale as `read_notebook_cell` — pass the same index you would use to read the cell you want to rewrite.
+In **other environments**: a coloured unified diff is rendered in the cell output area. Apply the change manually by editing the cell.
 
-### When the agent uses these tools
+`cell_index` uses the same zero-based execution-history scale as `read_notebook_cell`.
 
-When running a `%%jiuwen` cell, the agent can call these tools itself if it decides it needs to look at a variable or a cell more closely.  It will do this automatically — you do not need to tell it.
+### Agent-generated cell tagging
+
+Cells inserted via `insert_notebook_cell` in JupyterLab are tagged with `cell.metadata.jiuwen_generated = true`. In other environments, inserted code cells start with `# [jiuwen] Generated by JiuwenSwarm` so agent-generated code is identifiable in any Jupyter environment.
 
 ---
 
@@ -393,13 +448,13 @@ JiuwenSwarm reads its configuration from `~/.jiuwenswarm/config/config.yaml`. Th
 
 ## Google Colab
 
-Phase 1 (magic + notebook tools) works in Colab with no extra setup. Phase 2 (JupyterLab sidebar) is not supported — Colab uses its own frontend.
+Cell magics, notebook tools, and the Python API work in Colab with no extra setup. The JupyterLab sidebar is not available — Colab uses its own frontend.
 
 **Setup (first cell of the notebook):**
 
 ```python
 !pip install jiuwenswarm jiuwenswarm-jupyter -q
-# On first use, run jiuwenswarm-init to create the config file:
+# On first use, create the config file:
 !jiuwenswarm-init
 %load_ext jiuwenswarm_jupyter
 ```
@@ -411,13 +466,15 @@ After the config is created, subsequent sessions only need:
 %load_ext jiuwenswarm_jupyter
 ```
 
-Everything then works as normal: `%%jiuwen`, `%jiuwen`, `%jiuwen_error`, `read_variable()`, `insert_notebook_cell()` (display-block fallback), etc.
+Everything then works as normal: `%%jiuwen`, `%jiuwen`, `%jiuwen_error`, `read_variable()`, etc.
 
-> **Note:** `insert_notebook_cell(..., execute=True)` shows the code in the output area in Colab — it cannot insert a runnable cell directly because the Phase 2 frontend is not available.
+> **Note:** `insert_notebook_cell(..., execute=True)` shows the code in the output area in Colab — direct cell insertion requires the JupyterLab sidebar.
+
+---
 
 ## JupyterHub
 
-Phase 1 and Phase 3 work on JupyterHub with no changes. For Phase 2 (sidebar panel), the extension must be installed into the shared JupyterLab environment.
+All cell magics and notebook tools work on JupyterHub with no changes. To use the sidebar panel, install the extension into the shared JupyterLab environment.
 
 **Multi-user isolation:** Each user runs their own kernel and their own in-process `JiuWenSwarm` instance. Sessions are keyed by `os.getcwd()` (per-user home directory), so there is no shared state between users.
 
@@ -440,12 +497,14 @@ RUN pip install jiuwenswarm jiuwenswarm-jupyter && \
 
 Each user still needs their own `~/.jiuwenswarm/config/config.yaml` (run `jiuwenswarm-init` once per user account).
 
+---
+
 ## Remote Jupyter servers
 
 When connecting to a remote Jupyter server via SSH tunnel or `jupyter lab --ip=0.0.0.0`:
 
-- Phase 1 (`%%jiuwen`) works without any changes — the magic runs in the remote kernel.
-- Phase 2 (sidebar): the TypeScript extension runs in your local browser but communicates with the remote kernel via the Jupyter comm protocol, which is automatically tunnelled through the standard Jupyter server WebSocket. No extra ports are needed.
+- Cell magics work without any changes — they run in the remote kernel.
+- The sidebar panel runs in your local browser but communicates with the remote kernel via the Jupyter comm protocol, automatically tunnelled through the standard Jupyter server WebSocket. No extra ports are needed.
 - `JiuWenSwarm` must be installed on the **remote** machine, not the local one.
 
 ---
@@ -471,7 +530,7 @@ The TypeScript frontend may not have been built. Run `cd packages/frontend && np
 The comm target was not registered. Make sure `%load_ext jiuwenswarm_jupyter` runs in the kernel before the sidebar connects. If you opened JupyterLab before running any cells, run `%load_ext jiuwenswarm_jupyter` in any cell and then reload the sidebar.
 
 **`insert_notebook_cell` shows a block instead of inserting**
-This is the Phase 1 fallback — the cell cannot be inserted directly unless the JupyterLab sidebar panel is active (Phase 2). Copy the displayed code and paste it into a new cell.
+The cell cannot be inserted directly without the JupyterLab sidebar connected. Copy the displayed code and paste it into a new cell.
 
 **`replace_notebook_cell` shows a diff instead of a dialog**
-Same Phase 1 fallback — the diff is displayed in the output area as a coloured before/after view. Apply the change manually by editing the cell and re-running it.
+Same situation — the diff is displayed in the output area. Apply the change manually by editing the cell and re-running it.

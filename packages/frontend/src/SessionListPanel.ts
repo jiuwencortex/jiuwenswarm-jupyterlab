@@ -20,6 +20,7 @@ export class SessionListPanel extends Widget {
 
   private _sessionMgr: SessionManager;
   private _list: HTMLElement;
+  private _filter: string = '';
 
   constructor(sessionMgr: SessionManager) {
     super();
@@ -35,7 +36,7 @@ export class SessionListPanel extends Widget {
     // ── Header row ──────────────────────────────────────────────────────────
     const header = document.createElement('div');
     header.style.cssText =
-      'display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;';
+      'display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;';
 
     const titleEl = document.createElement('span');
     titleEl.style.cssText =
@@ -55,6 +56,21 @@ export class SessionListPanel extends Widget {
     header.appendChild(newBtn);
     this.node.appendChild(header);
 
+    // ── Filter input ─────────────────────────────────────────────────────────
+    const filterInput = document.createElement('input');
+    filterInput.type = 'text';
+    filterInput.placeholder = 'Filter sessions…';
+    filterInput.style.cssText =
+      'width:100%; box-sizing:border-box; font-size:11px; padding:3px 6px;' +
+      ' margin-bottom:6px; border-radius:4px;' +
+      ' border:1px solid var(--jp-border-color1);' +
+      ' background:var(--jp-layout-color1); color:var(--jp-ui-font-color1); outline:none;';
+    filterInput.addEventListener('input', () => {
+      this._filter = filterInput.value.toLowerCase();
+      this._render();
+    });
+    this.node.appendChild(filterInput);
+
     // ── Session list ────────────────────────────────────────────────────────
     this._list = document.createElement('div');
     this.node.appendChild(this._list);
@@ -64,16 +80,23 @@ export class SessionListPanel extends Widget {
     this._render();
   }
 
+  private _matches(session: SessionInfo): boolean {
+    if (!this._filter) return true;
+    const title = (session.title || session.session_id).toLowerCase();
+    return title.includes(this._filter);
+  }
+
   private _render(): void {
     this._list.innerHTML = '';
     const kernels = this._sessionMgr.allKernels();
 
     if (kernels.length > 1) {
       // ── Grouped view: one section per kernel ───────────────────────────
-      let totalSessions = 0;
+      let totalVisible = 0;
       for (const kernel of kernels) {
-        const sessions = this._sessionMgr.getKernelSessions(kernel.id);
-        totalSessions += sessions.length;
+        const sessions = this._sessionMgr.getKernelSessions(kernel.id)
+          .filter(s => this._matches(s));
+        totalVisible += sessions.length;
         this._list.appendChild(this._makeKernelHeader(kernel.label));
         if (sessions.length === 0) {
           this._list.appendChild(this._makeEmptyNote());
@@ -86,14 +109,14 @@ export class SessionListPanel extends Widget {
           }
         }
       }
-      if (totalSessions === 0) {
+      if (totalVisible === 0) {
         this._list.appendChild(this._makeEmptyNote());
       }
       return;
     }
 
     // ── Flat view: single kernel or no kernels yet ─────────────────────
-    const sessions = this._sessionMgr.sessions;
+    const sessions = this._sessionMgr.sessions.filter(s => this._matches(s));
     const activeId = this._sessionMgr.activeSessionId;
 
     if (sessions.length === 0) {

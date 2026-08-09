@@ -20,13 +20,17 @@ _MAX_OUTPUT_CHARS = 800
 _MAX_DF_CHARS = 600
 
 
-def build_context_block(ip) -> str:
+def build_context_block(ip, pinned_vars: list[str] | None = None) -> str:
     """Return a markdown-formatted context block for the current notebook state.
 
     Parameters
     ----------
     ip:
         The running ``IPython.InteractiveShell`` instance.
+    pinned_vars:
+        Variable names that are always included in context regardless of the
+        normal auto-context filtering.  These appear in a dedicated section
+        before the general variable sweep.
 
     Returns
     -------
@@ -36,7 +40,12 @@ def build_context_block(ip) -> str:
     """
     parts: list[str] = []
 
-    var_section = _extract_variables(ip)
+    if pinned_vars:
+        pinned_section = _extract_pinned_variables(ip, pinned_vars)
+        if pinned_section:
+            parts.append(pinned_section)
+
+    var_section = _extract_variables(ip, skip=set(pinned_vars or []))
     if var_section:
         parts.append(var_section)
 
@@ -58,11 +67,31 @@ def build_context_block(ip) -> str:
 
 # ── Variable extraction ───────────────────────────────────────────────────────
 
-def _extract_variables(ip) -> str:
+def _extract_pinned_variables(ip, pinned_vars: list[str]) -> str:
+    """Return a section for explicitly pinned variables."""
     ns: dict[str, Any] = ip.user_ns
+    lines: list[str] = []
+    for name in pinned_vars:
+        if name not in ns:
+            lines.append(f"- `{name}`: <not found in namespace>")
+            continue
+        value = ns[name]
+        type_name = type(value).__name__
+        summary = _summarize_value(name, value)
+        lines.append(f"- `{name}` ({type_name}): {summary}")
+    if not lines:
+        return ""
+    return "**Pinned variables:**\n" + "\n".join(lines)
+
+
+def _extract_variables(ip, skip: set[str] | None = None) -> str:
+    ns: dict[str, Any] = ip.user_ns
+    skip = skip or set()
     lines: list[str] = []
 
     for name, value in sorted(ns.items()):
+        if name in skip:
+            continue
         if name.startswith("_") or name in ("In", "Out", "exit", "quit", "get_ipython"):
             continue
         if callable(value) and not _is_interesting_callable(value):

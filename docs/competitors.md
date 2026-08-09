@@ -17,21 +17,28 @@ The most direct competitor. An official JupyterLab extension with a sidebar chat
 | Feature | Jupyter AI | jiuwenswarm-jupyterlab |
 |---|---|---|
 | Cell magic (`%%ai` / `%%jiuwen`) | Yes | Yes |
-| Sidebar chat panel | Yes | Yes (Phase 2) |
+| Sidebar chat panel | Yes | Yes |
 | Swarm map — visualize parallel agents | No | Yes |
 | Multi-agent teams | No — single agent only | Yes — full team mode |
 | Skill system (persistent, per-task instructions) | No | Yes |
 | Memory across sessions | No | Yes |
 | Agent reads live notebook variables | Limited | Yes — full namespace access |
+| Pinned variables always injected into context | No | Yes (`%jiuwen_pin`) |
 | Agent inserts cells into notebook | No | Yes (`insert_notebook_cell`) |
 | Agent reads cell outputs | No | Yes (`read_notebook_cell`) |
+| Export conversation history to Markdown | No | Yes (`%jiuwen_export`) |
+| Continue session with trimmed context | No | Yes (`%jiuwen_replay`) |
+| Multi-kernel support (several notebooks open) | No | Yes |
+| Session list grouped by notebook | No | Yes |
+| Session filter / search | No | Yes |
+| Live cost display in status bar | No | Yes |
 | Slack / Discord / Telegram channel integration | No | Yes (via JiuwenSwarm channels) |
-| Works in Google Colab | Partially | Yes (Phase 1, pip install) |
-| Works in Kaggle Notebooks | No | Yes (Phase 1) |
+| Works in Google Colab | Partially | Yes |
+| Works in Kaggle Notebooks | No | Yes |
 | Requires running server | No | No |
 | Open source | Yes | Yes |
 
-**Summary:** Jupyter AI is the obvious comparison point for any reviewer. jiuwenswarm-jupyterlab wins on multi-agent capability, skill system, memory, and the notebook-native tools. Jupyter AI wins on LLM provider breadth and being the official first-party extension.
+**Summary:** Jupyter AI is the obvious comparison point for any reviewer. jiuwenswarm-jupyterlab wins on multi-agent capability, skill system, memory, notebook-native tools, and conversation management. Jupyter AI wins on LLM provider breadth and being the official first-party extension.
 
 ---
 
@@ -50,6 +57,7 @@ GitHub Copilot adds AI completions and a chat panel to VS Code's Jupyter noteboo
 | Chat panel | Yes | Yes |
 | Multi-agent | No | Yes |
 | Reads notebook variables | Limited | Yes |
+| Session export / replay | No | Yes |
 | Requires subscription | Yes ($10–19/month) | No |
 
 **Summary:** Not a true JupyterLab competitor — different environment. For users locked into VS Code Notebooks, Copilot is the alternative. For users who actually use JupyterLab or browser-based notebooks, this is not a realistic alternative.
@@ -70,7 +78,7 @@ A browser-based sandboxed Python environment where GPT-4 writes and runs code, r
 | Works inside your existing notebook | No — separate product | Yes |
 | Access to your live variables and data | No — you upload files | Yes |
 | Multi-agent | No | Yes |
-| Persistent sessions | Limited | Yes |
+| Persistent sessions across restarts | Limited | Yes |
 | Works with your own LLM API | No | Yes |
 | Private data stays local | No — sent to OpenAI | Yes (can run fully local) |
 
@@ -120,14 +128,20 @@ A next-generation Python notebook format where cells are reactive (like a spread
 
 ## Feature Gap Summary
 
-Features that **no competitor has** and jiuwenswarm-jupyterlab provides (or will provide):
+Features that **no competitor has** and jiuwenswarm-jupyterlab provides:
 
 | Feature | Status |
 |---|---|
-| Multi-agent teams running inside a Jupyter kernel | Implemented (Phase 1 + Phase 2) |
-| Live swarm map showing parallel agents in JupyterLab | Implemented (Phase 2) |
-| Agent reads live Python variables directly from kernel | Implemented (Phase 3) |
-| Agent inserts runnable code cells into the notebook | Implemented (Phase 3) |
+| Multi-agent teams running inside a Jupyter kernel | Implemented |
+| Live swarm map showing parallel agents in JupyterLab | Implemented |
+| Agent reads live Python variables directly from kernel | Implemented |
+| Agent inserts runnable code cells into the notebook | Implemented |
+| Pinned variables always injected into agent context | Implemented |
+| Export full conversation history to Markdown | Implemented |
+| Continue session in fresh context via replay | Implemented |
+| Multi-kernel support — several notebooks open at once | Implemented |
+| Session list grouped by notebook with filter | Implemented |
+| Live session cost display in JupyterLab status bar | Implemented |
 | Persistent skill system scoped to agent tasks | Implemented (via JiuwenSwarm) |
-| Session memory that persists across notebook restarts | Roadmap (Phase 5) |
-| Works in Colab, Kaggle, and remote Jupyter servers | Roadmap (Phase 4) |
+| Session memory that persists across notebook restarts | Implemented |
+| Works in Colab, Kaggle, and remote Jupyter servers | Implemented |

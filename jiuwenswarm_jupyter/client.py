@@ -37,6 +37,7 @@ class JupyterSwarm:
         self._session_id = session_id or make_session_id()
         self._swarm = None  # lazy — imported on first use to avoid hard dep at load time
         self.timeout: float = 300.0  # default; overridable via %jiuwen_config or run() kwarg
+        self._history: list[dict] = []  # in-memory exchange log for %jiuwen_export / %jiuwen_replay
 
     # ── Public ──────────────────────────────────────────────────────────────
 
@@ -100,8 +101,19 @@ class JupyterSwarm:
                 ip = None
 
         full_query = query
-        if inject_context and ip is not None:
-            ctx = build_context_block(ip)
+        if ip is not None:
+            from .config import get_config
+            cfg = get_config(ip)
+            pinned = cfg.pinned_vars if cfg.pinned_vars else None
+            if inject_context:
+                ctx = build_context_block(ip, pinned_vars=pinned)
+            elif pinned:
+                # inject_context=False but user has pinned vars — include only those
+                from .context import _extract_pinned_variables
+                pin_section = _extract_pinned_variables(ip, pinned)
+                ctx = pin_section if pin_section else ""
+            else:
+                ctx = ""
             if ctx:
                 full_query = f"{ctx}\n\n---\n\n{query}"
 
@@ -109,6 +121,9 @@ class JupyterSwarm:
         swarm = self._get_swarm()
         renderer = StreamRenderer()
 
+        import time as _time
+
+        final_text = ""
         try:
             async with asyncio.timeout(effective_timeout):
                 final_text = await renderer.render(
@@ -121,9 +136,25 @@ class JupyterSwarm:
                 )
         except TimeoutError:
             renderer.finalize_error(f"Request timed out after {effective_timeout:.0f}s.")
-            final_text = ""
+
+        # Record exchange for %jiuwen_export / %jiuwen_replay
+        if query.strip() and final_text:
+            self._history.append({
+                "timestamp": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "mode": effective_mode,
+                "query": query.strip(),
+                "response": final_text.strip(),
+            })
 
         return final_text
+
+    def get_history(self) -> list[dict]:
+        """Return the list of recorded exchanges for this session."""
+        return list(self._history)
+
+    def clear_history(self) -> None:
+        """Clear the in-memory exchange log (does not affect the session on the server)."""
+        self._history.clear()
 
     def run_sync(self, query: str, **kwargs) -> str:
         """Synchronous wrapper around :meth:`run` for use in cell magics."""
