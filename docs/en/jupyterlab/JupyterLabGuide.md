@@ -6,7 +6,7 @@
 pip install jiuwenswarm-jupyter
 ```
 
-The JupyterLab sidebar panel requires the TypeScript frontend to be built. See [PUBLISHING.md](../operations/PUBLISHING.md) for the full build and install steps.
+The JupyterLab sidebar panel requires the TypeScript frontend to be built. See [PUBLISHING.md](../../../jupyterlab/publishing/PUBLISHING.md) for the full build and install steps.
 
 ## Loading the extension
 

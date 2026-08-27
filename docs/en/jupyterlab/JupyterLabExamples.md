@@ -43,7 +43,7 @@ That is all. After this, `%load_ext jiuwenswarm_jupyter` in any notebook starts 
 | What you want to use | What you need |
 |---|---|
 | `%%jiuwen` magic, `%jiuwen`, Python API, notebook tools | `pip install` + `jiuwenswarm-init` (one-time) |
-| JupyterLab sidebar chat panel, swarm map | The above + build the TypeScript frontend (see [PUBLISHING.md](../operations/PUBLISHING.md)) |
+| JupyterLab sidebar chat panel, swarm map | The above + build the TypeScript frontend (see [PUBLISHING.md](../../../jupyterlab/publishing/PUBLISHING.md)) |
 
 The examples below all work with just `pip install` + `jiuwenswarm-init`. You do not need to build anything for them.
 
